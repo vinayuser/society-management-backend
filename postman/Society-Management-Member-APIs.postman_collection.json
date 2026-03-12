@@ -1,0 +1,336 @@
+{
+  "info": {
+    "name": "Society Management - Member / Resident APIs",
+    "description": "APIs for flat owners and society members (resident-facing application). Use Login to get accessToken, then set it in collection auth or as Bearer token in each request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{access_token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "access_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('access_token', json.data.accessToken);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"resident@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        },
+        {
+          "name": "Get Profile (Me)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/refresh"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "App (Member)",
+      "item": [
+        {
+          "name": "My Profile (with flats)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/app/profile"
+          }
+        },
+        {
+          "name": "My Flats",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/app/my-flats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Society",
+      "item": [
+        {
+          "name": "Get My Society Config",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/societies/me/config"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notices",
+      "item": [
+        {
+          "name": "List Notices",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notices"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complaints",
+      "item": [
+        {
+          "name": "List Complaints",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/complaints"
+          }
+        },
+        {
+          "name": "Create Complaint",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Water leakage\",\n  \"description\": \"Leak in common corridor\",\n  \"category\": \"maintenance\"\n}"
+            },
+            "url": "{{base_url}}/complaints"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Visitors",
+      "item": [
+        {
+          "name": "List Visitors (my flat)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/visitors"
+          }
+        },
+        {
+          "name": "Log Visitor Entry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flatId\": 1,\n  \"visitorName\": \"John Doe\",\n  \"visitorPhone\": \"9876543210\",\n  \"purpose\": \"Personal visit\",\n  \"visitorType\": \"guest\"\n}"
+            },
+            "url": "{{base_url}}/visitors/entry"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deliveries",
+      "item": [
+        {
+          "name": "List Deliveries (my flat)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/deliveries"
+          }
+        },
+        {
+          "name": "Update Delivery Status (collected)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"collected\"\n}"
+            },
+            "url": "{{base_url}}/deliveries/1/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Marketplace",
+      "item": [
+        {
+          "name": "List Community Marketplace",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/marketplace"
+          }
+        },
+        {
+          "name": "Get Marketplace Item",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/marketplace/1"
+          }
+        },
+        {
+          "name": "Create Marketplace Item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Selling study table\",\n  \"description\": \"Good condition\",\n  \"price\": 1500,\n  \"category\": \"furniture\"\n}"
+            },
+            "url": "{{base_url}}/marketplace"
+          }
+        },
+        {
+          "name": "Update Marketplace Item",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated title\",\n  \"price\": 1200\n}"
+            },
+            "url": "{{base_url}}/marketplace/1"
+          }
+        },
+        {
+          "name": "Create Transaction",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": 1\n}"
+            },
+            "url": "{{base_url}}/marketplace/transactions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lost & Found",
+      "item": [
+        {
+          "name": "List Lost & Found",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/lost-found"
+          }
+        },
+        {
+          "name": "Create Lost & Found",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lost keys\",\n  \"description\": \"Set of 3 keys near lift\",\n  \"type\": \"lost\"\n}"
+            },
+            "url": "{{base_url}}/lost-found"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Polls",
+      "item": [
+        {
+          "name": "List Polls",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/polls"
+          }
+        },
+        {
+          "name": "Vote in Poll",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"optionId\": 1\n}"
+            },
+            "url": "{{base_url}}/polls/1/vote"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "List Chat Groups",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/chat/groups"
+          }
+        },
+        {
+          "name": "Get Society Users",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/chat/groups/society-users"
+          }
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/chat/messages?group_id=1"
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": 1,\n  \"messageText\": \"Hello everyone\"\n}"
+            },
+            "url": "{{base_url}}/chat/message"
+          }
+        }
+      ]
+    }
+  ]
+}
