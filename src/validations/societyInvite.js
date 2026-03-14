@@ -8,6 +8,7 @@ const createInvite = Joi.object({
   planType: Joi.string().valid('shared_app', 'white_label').optional(),
   setupFee: Joi.number().min(0).optional(),
   monthlyFee: Joi.number().min(0).optional(),
+  address: Joi.string().allow('').optional().trim(),
 });
 
 const acceptInvite = Joi.object({

@@ -11,4 +11,13 @@ const refresh = Joi.object({
   refreshToken: Joi.string().required(),
 });
 
-module.exports = { login, refresh };
+const setPassword = Joi.object({
+  token: Joi.string().required(),
+  newPassword: Joi.string().min(6).max(128).required(),
+});
+
+const sendSetPasswordLink = Joi.object({
+  userId: Joi.number().integer().required(),
+});
+
+module.exports = { login, refresh, setPassword, sendSetPasswordLink };

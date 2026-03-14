@@ -4,7 +4,7 @@ const { authenticate } = require('../middleware/auth');
 const { superAdminOnly } = require('../middleware/authorize');
 const { validate } = require('../middleware/validate');
 const { societyInvite: inv } = require('../validations');
-const { common } = require('../validations');
+const { uploadOnboardingLogo } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -19,6 +19,7 @@ router.post(
 router.get('/', authenticate, superAdminOnly, societyInviteController.listInvites);
 router.post('/:id/resend', authenticate, superAdminOnly, societyInviteController.resendInvite);
 router.get('/:token', societyInviteController.getInviteByToken);
+router.post('/:token/upload-logo', uploadOnboardingLogo, societyInviteController.uploadLogo);
 
 router.post(
   '/:token/accept',

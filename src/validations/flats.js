@@ -34,10 +34,20 @@ const bulkCreate = Joi.object({
         flatNumber: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
         towerBlock: Joi.string().optional(),
         flat_number: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+        floor: Joi.number().integer().min(0).optional().allow(null),
+        flatType: Joi.string().trim().max(32).optional().allow('', null),
+        areaSqft: Joi.number().min(0).optional().allow(null),
+        status: Joi.string().trim().max(32).optional().allow('', null),
       })
     )
     .min(1)
     .required(),
+  defaults: Joi.object({
+    floor: Joi.number().integer().min(0).optional().allow(null),
+    flatType: Joi.string().trim().max(32).optional().allow('', null),
+    areaSqft: Joi.number().min(0).optional().allow(null),
+    status: Joi.string().trim().max(32).optional().allow('', null),
+  }).optional(),
 });
 
 const idParam = Joi.object({

@@ -15,6 +15,7 @@ const allowList = (roles) => (req, res, next) => {
 router.use(authenticate, scopeToUserSociety);
 
 router.get('/', allowList(['society_admin', 'resident', 'super_admin']), complaintsController.list);
+router.get('/:id', allowList(['society_admin', 'resident', 'super_admin']), validate(c.idParam, 'params'), complaintsController.getOne);
 router.post(
   '/',
   allowList(['resident', 'society_admin', 'super_admin']),

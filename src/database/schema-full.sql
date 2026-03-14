@@ -1,5 +1,8 @@
--- Society Management SaaS - Core Schema
--- Run: node src/database/migrate.js (after creating DB: CREATE DATABASE society_management)
+-- Society Management SaaS - Full Consolidated Schema (for future migrations / fresh installs)
+-- Single file containing all tables and columns as of latest migrations.
+-- Run: node src/database/run-sql-file.js src/database/schema-full.sql (after DB exists)
+-- Or: mysql -u user -p society_management < src/database/schema-full.sql
+-- Note: Does not create database; run CREATE DATABASE society_management first if needed.
 
 CREATE TABLE IF NOT EXISTS societies (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -81,11 +84,64 @@ CREATE TABLE IF NOT EXISTS flats (
   society_id INT UNSIGNED NOT NULL,
   tower VARCHAR(64) NOT NULL,
   flat_number VARCHAR(32) NOT NULL,
+  floor INT UNSIGNED DEFAULT NULL,
+  flat_type VARCHAR(32) DEFAULT NULL,
+  area_sqft DECIMAL(10,2) DEFAULT NULL,
+  ownership_type VARCHAR(32) DEFAULT NULL,
+  owner_name VARCHAR(255) DEFAULT NULL,
+  owner_contact VARCHAR(32) DEFAULT NULL,
+  owner_email VARCHAR(255) DEFAULT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_society_tower_flat (society_id, tower, flat_number),
   INDEX idx_society_id (society_id),
   FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS flat_members (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  flat_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED DEFAULT NULL,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(32) DEFAULT NULL,
+  email VARCHAR(255) DEFAULT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'family_member',
+  profile_image VARCHAR(512) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_society_flat (society_id, flat_id),
+  INDEX idx_flat_id (flat_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS flat_vehicles (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  flat_id INT UNSIGNED NOT NULL,
+  vehicle_number VARCHAR(64) NOT NULL,
+  vehicle_type VARCHAR(32) NOT NULL DEFAULT 'car',
+  parking_slot VARCHAR(64) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_flat (society_id, flat_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS flat_documents (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  flat_id INT UNSIGNED NOT NULL,
+  document_name VARCHAR(255) NOT NULL,
+  document_type VARCHAR(64) DEFAULT NULL,
+  file_url VARCHAR(512) NOT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_flat (society_id, flat_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS residents (
@@ -104,18 +160,174 @@ CREATE TABLE IF NOT EXISTS residents (
   FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS members (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  flat_id INT UNSIGNED DEFAULT NULL,
+  user_id INT UNSIGNED DEFAULT NULL,
+  name VARCHAR(255) NOT NULL,
+  profile_image VARCHAR(512) DEFAULT NULL,
+  phone VARCHAR(32) DEFAULT NULL,
+  email VARCHAR(255) DEFAULT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'family_member',
+  gender VARCHAR(16) DEFAULT NULL,
+  dob DATE DEFAULT NULL,
+  occupation VARCHAR(255) DEFAULT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  joined_at DATE DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_society_id (society_id),
+  INDEX idx_flat_id (flat_id),
+  INDEX idx_user_id (user_id),
+  INDEX idx_status (status),
+  INDEX idx_role (role),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS member_family (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  member_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  relationship VARCHAR(64) DEFAULT NULL,
+  phone VARCHAR(32) DEFAULT NULL,
+  age INT UNSIGNED DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_member (society_id, member_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS member_emergency_contacts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  member_id INT UNSIGNED NOT NULL,
+  contact_name VARCHAR(255) NOT NULL,
+  relationship VARCHAR(64) DEFAULT NULL,
+  phone VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_member (society_id, member_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS member_documents (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  member_id INT UNSIGNED NOT NULL,
+  document_name VARCHAR(255) NOT NULL,
+  document_type VARCHAR(64) DEFAULT NULL,
+  file_url VARCHAR(512) NOT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_member (society_id, member_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS member_vehicles (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  member_id INT UNSIGNED NOT NULL,
+  vehicle_number VARCHAR(64) NOT NULL,
+  vehicle_type VARCHAR(32) NOT NULL DEFAULT 'car',
+  parking_slot VARCHAR(64) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_member (society_id, member_id),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS resident_signup_requests (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  society_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  phone VARCHAR(32) DEFAULT NULL,
+  tower VARCHAR(64) NOT NULL,
+  flat_number VARCHAR(32) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  rejection_reason VARCHAR(512) DEFAULT NULL,
+  reviewed_at TIMESTAMP NULL DEFAULT NULL,
+  reviewed_by_user_id INT UNSIGNED DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_society_status (society_id, status),
+  INDEX idx_email (email),
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS guards (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED DEFAULT NULL,
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(32) NOT NULL,
+  profile_picture VARCHAR(512) DEFAULT NULL,
+  email VARCHAR(255) DEFAULT NULL,
+  employee_id VARCHAR(64) DEFAULT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'guard',
+  assigned_blocks VARCHAR(255) DEFAULT NULL,
+  joining_date DATE DEFAULT NULL,
   is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_society_id (society_id),
   FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS guard_shifts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  guard_id INT UNSIGNED NOT NULL,
+  society_id INT UNSIGNED NOT NULL,
+  shift_start DATETIME NOT NULL,
+  shift_end DATETIME NOT NULL,
+  assigned_gate VARCHAR(128) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_guard_id (guard_id),
+  INDEX idx_society_id (society_id),
+  INDEX idx_shift_start (shift_start),
+  FOREIGN KEY (guard_id) REFERENCES guards(id) ON DELETE CASCADE,
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS guard_leaves (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  guard_id INT UNSIGNED NOT NULL,
+  society_id INT UNSIGNED NOT NULL,
+  leave_type VARCHAR(32) NOT NULL DEFAULT 'casual',
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  notes TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_guard_id (guard_id),
+  INDEX idx_society_id (society_id),
+  INDEX idx_status (status),
+  INDEX idx_dates (start_date, end_date),
+  FOREIGN KEY (guard_id) REFERENCES guards(id) ON DELETE CASCADE,
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS guard_documents (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  guard_id INT UNSIGNED NOT NULL,
+  society_id INT UNSIGNED NOT NULL,
+  document_name VARCHAR(255) NOT NULL,
+  document_type VARCHAR(64) DEFAULT NULL,
+  file_url VARCHAR(512) NOT NULL,
+  expiry_date DATE DEFAULT NULL,
+  uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_guard_id (guard_id),
+  INDEX idx_society_id (society_id),
+  FOREIGN KEY (guard_id) REFERENCES guards(id) ON DELETE CASCADE,
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS visitors (
@@ -180,6 +392,7 @@ CREATE TABLE IF NOT EXISTS notices (
 CREATE TABLE IF NOT EXISTS billing (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
+  flat_id INT UNSIGNED DEFAULT NULL,
   amount DECIMAL(12,2) NOT NULL,
   type ENUM('setup', 'monthly') NOT NULL,
   billing_date DATE NOT NULL,
@@ -191,9 +404,11 @@ CREATE TABLE IF NOT EXISTS billing (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_society_id (society_id),
+  INDEX idx_flat_id (flat_id),
   INDEX idx_billing_date (billing_date),
   INDEX idx_payment_status (payment_status),
-  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE,
+  FOREIGN KEY (flat_id) REFERENCES flats(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS ads (
@@ -236,7 +451,6 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Module: Vendor Marketplace
 CREATE TABLE IF NOT EXISTS vendors (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
@@ -255,7 +469,6 @@ CREATE TABLE IF NOT EXISTS vendors (
   FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
 );
 
--- Module: Delivery and Package Tracking
 CREATE TABLE IF NOT EXISTS deliveries (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
@@ -276,7 +489,6 @@ CREATE TABLE IF NOT EXISTS deliveries (
   FOREIGN KEY (received_by_guard) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Module: Community Marketplace
 CREATE TABLE IF NOT EXISTS marketplace_items (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
@@ -284,8 +496,13 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
   title VARCHAR(255) NOT NULL,
   description TEXT DEFAULT NULL,
   price DECIMAL(12,2) DEFAULT NULL,
+  media_urls JSON DEFAULT NULL,
   image_url VARCHAR(512) DEFAULT NULL,
   status ENUM('active', 'sold', 'removed') NOT NULL DEFAULT 'active',
+  category VARCHAR(64) DEFAULT NULL,
+  item_condition VARCHAR(16) NOT NULL DEFAULT 'used',
+  is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+  listed_globally TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_society_id (society_id),
@@ -295,7 +512,26 @@ CREATE TABLE IF NOT EXISTS marketplace_items (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Module: Community Engagement - Lost and Found
+CREATE TABLE IF NOT EXISTS marketplace_transactions (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  buyer_user_id INT UNSIGNED NOT NULL,
+  seller_user_id INT UNSIGNED NOT NULL,
+  item_id INT UNSIGNED NOT NULL,
+  society_id INT UNSIGNED NOT NULL,
+  transaction_status ENUM('pending', 'completed', 'canceled') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_buyer (buyer_user_id),
+  INDEX idx_seller (seller_user_id),
+  INDEX idx_item (item_id),
+  INDEX idx_society (society_id),
+  INDEX idx_status (transaction_status),
+  FOREIGN KEY (buyer_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (seller_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES marketplace_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS lost_found (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
@@ -312,7 +548,6 @@ CREATE TABLE IF NOT EXISTS lost_found (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Module: Community Engagement - Polls
 CREATE TABLE IF NOT EXISTS polls (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,
@@ -347,7 +582,6 @@ CREATE TABLE IF NOT EXISTS poll_votes (
   FOREIGN KEY (option_id) REFERENCES poll_options(id) ON DELETE CASCADE
 );
 
--- Module: Real-Time Chat (multi-tenant, society-scoped)
 CREATE TABLE IF NOT EXISTS chat_groups (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   society_id INT UNSIGNED NOT NULL,

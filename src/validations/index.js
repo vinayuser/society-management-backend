@@ -16,6 +16,7 @@ const marketplace = require('./marketplace');
 const lostFound = require('./lostFound');
 const polls = require('./polls');
 const chat = require('./chat');
+const signupRequests = require('./signupRequests');
 
 const common = require('./common');
 
@@ -38,5 +39,6 @@ module.exports = {
   lostFound,
   polls,
   chat,
+  signupRequests,
   common,
 };

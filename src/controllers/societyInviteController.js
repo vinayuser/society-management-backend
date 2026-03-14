@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../config/database');
 const config = require('../config');
 const emailService = require('../services/emailService');
+const { getOnboardingLogoRelativeUrl } = require('../middleware/upload');
 
 async function createInvite(req, res, next) {
   try {
@@ -13,6 +14,7 @@ async function createInvite(req, res, next) {
       planType,
       setupFee,
       monthlyFee,
+      address,
     } = req.body;
 
     const alias = societyName
@@ -33,8 +35,8 @@ async function createInvite(req, res, next) {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await db.pool.execute(
-      `INSERT INTO society_invites (society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, invite_token, status, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO society_invites (society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, address, invite_token, status, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       [
         societyName,
         contactEmail,
@@ -43,6 +45,7 @@ async function createInvite(req, res, next) {
         planType || config.planTypes.SHARED_APP,
         setupFee || 0,
         monthlyFee || 0,
+        address || null,
         inviteToken,
         expiresAt,
       ]
@@ -65,11 +68,37 @@ async function createInvite(req, res, next) {
   }
 }
 
+async function uploadLogo(req, res, next) {
+  try {
+    const { token } = req.params;
+    if (!req.file || !req.file.filename) {
+      return res.status(400).json({ success: false, message: 'No logo file uploaded' });
+    }
+    const [rows] = await db.pool.execute(
+      'SELECT id FROM society_invites WHERE invite_token = ? AND status = ?',
+      [token, 'pending']
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Invitation not found or expired' });
+    }
+    const baseUrl = config.apiBaseUrl || `${req.protocol}://${req.get('host')}`;
+    const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const relativePath = getOnboardingLogoRelativeUrl(token, req.file.filename);
+    const logoUrl = base + (relativePath.startsWith('/') ? relativePath : '/' + relativePath);
+    res.json({
+      success: true,
+      data: { logoUrl },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getInviteByToken(req, res, next) {
   try {
     const { token } = req.params;
     const [rows] = await db.pool.execute(
-      `SELECT id, society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, invite_token, status, expires_at, created_at
+      `SELECT id, society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, address, invite_token, status, expires_at, created_at
        FROM society_invites WHERE invite_token = ? AND status = 'pending'`,
       [token]
     );
@@ -90,6 +119,7 @@ async function getInviteByToken(req, res, next) {
         planType: invite.plan_type,
         setupFee: parseFloat(invite.setup_fee),
         monthlyFee: parseFloat(invite.monthly_fee),
+        address: invite.address || '',
       },
     });
   } catch (err) {
@@ -161,6 +191,8 @@ async function acceptInvite(req, res, next) {
       );
       societyId = socResult.insertId;
 
+      // Single society address: use body address or invite address (same value used everywhere)
+      const societyAddress = address !== undefined && address !== '' ? address : (invite.address || null);
       await conn.execute(
         `INSERT INTO society_config (society_id, logo, theme_color, address, banner_image, towers_blocks, total_flats, admin_contact_name, admin_contact_phone)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -168,7 +200,7 @@ async function acceptInvite(req, res, next) {
           societyId,
           logo || null,
           themeColor || null,
-          address || null,
+          societyAddress,
           bannerImage || null,
           towersBlocks ? JSON.stringify(towersBlocks) : null,
           totalFlats ?? invite.flat_count,
@@ -212,7 +244,7 @@ async function acceptInvite(req, res, next) {
 async function listInvites(req, res, next) {
   try {
     const [rows] = await db.pool.execute(
-      `SELECT id, society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, invite_token, status, expires_at, created_at
+      `SELECT id, society_name, email, phone, flat_count, plan_type, setup_fee, monthly_fee, address, invite_token, status, expires_at, created_at
        FROM society_invites ORDER BY created_at DESC`
     );
     res.json({
@@ -226,6 +258,7 @@ async function listInvites(req, res, next) {
         planType: r.plan_type,
         setupFee: parseFloat(r.setup_fee),
         monthlyFee: parseFloat(r.monthly_fee),
+        address: r.address || '',
         inviteToken: r.invite_token,
         status: r.status,
         expiresAt: r.expires_at,
@@ -269,6 +302,7 @@ async function resendInvite(req, res, next) {
 module.exports = {
   createInvite,
   getInviteByToken,
+  uploadLogo,
   acceptInvite,
   listInvites,
   resendInvite,

@@ -8,6 +8,12 @@ const { society: soc } = require('../validations');
 
 const router = express.Router();
 
+// Public: list active societies for member signup (id, name, alias)
+router.get('/list', societyController.listForSignup);
+// Public: towers and flats for signup form (no auth)
+router.get('/:id/towers', societyController.listTowersForSignup);
+router.get('/:id/flats', societyController.listFlatsForSignup);
+
 router.get('/', authenticate, superAdminOnly, societyController.list);
 router.get('/config', resolveTenant, requireTenant, societyController.getConfig);
 router.get('/me/config', authenticate, scopeToUserSociety, societyController.getConfig);

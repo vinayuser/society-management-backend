@@ -39,4 +39,24 @@ async function sendInviteEmail(to, societyName, inviteUrl) {
   });
 }
 
-module.exports = { sendInviteEmail, getTransporter };
+async function sendSignupRequestNotification(to, societyName, applicantName, applicantEmail) {
+  const t = getTransporter();
+  if (!t) {
+    console.warn('Email not configured. Signup request:', applicantName, applicantEmail);
+    return;
+  }
+  await t.sendMail({
+    from: config.email.from,
+    to,
+    subject: `New member signup request – ${societyName}`,
+    html: `
+      <p>Hello,</p>
+      <p>A new member has requested to join <strong>${societyName}</strong>.</p>
+      <p><strong>Name:</strong> ${applicantName}</p>
+      <p><strong>Email:</strong> ${applicantEmail}</p>
+      <p>Please log in to the admin dashboard to approve or reject this request.</p>
+    `,
+  });
+}
+
+module.exports = { sendInviteEmail, sendSignupRequestNotification, getTransporter };

@@ -15,6 +15,7 @@ const router = express.Router();
 router.use(authenticate, adminOrSocietyAdmin, scopeToUserSociety);
 
 router.get('/', flatsController.list);
+router.get('/towers', flatsController.getTowers);
 router.post('/', validate(f.create), flatsController.create);
 router.post('/bulk', validate(f.bulkCreate), flatsController.bulkCreate);
 router.get('/:id', validate(f.idParam, 'params'), flatsController.getOne);

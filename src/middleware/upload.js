@@ -3,6 +3,11 @@ const path = require('path');
 const fs = require('fs');
 
 const UPLOAD_BASE = path.join(__dirname, '../../uploads');
+try {
+  fs.mkdirSync(UPLOAD_BASE, { recursive: true });
+} catch (e) {
+  if (e.code !== 'EEXIST') throw e;
+}
 
 function getGuardUploadDir(societyId, sub = 'profile') {
   const dir = path.join(UPLOAD_BASE, 'guards', String(societyId || '0'), sub);
@@ -169,12 +174,48 @@ const uploadMemberDocument = multer({
   },
 }).single('file');
 
+function getOnboardingLogoDir(token) {
+  const dir = path.join(UPLOAD_BASE, 'onboarding-logos', String((token || '').replace(/[^a-zA-Z0-9]/g, '_')));
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+  }
+  return dir;
+}
+
+function getOnboardingLogoRelativeUrl(token, filename) {
+  return `/uploads/onboarding-logos/${String((token || '').replace(/[^a-zA-Z0-9]/g, '_'))}/${filename}`;
+}
+
+const onboardingLogoStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    cb(null, getOnboardingLogoDir(req.params.token));
+  },
+  filename(req, file, cb) {
+    const ext = (file.originalname && path.extname(file.originalname)) || '.jpg';
+    cb(null, `logo_${Date.now()}${ext}`);
+  },
+});
+
+const uploadOnboardingLogo = multer({
+  storage: onboardingLogoStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    const allowed = /^image\/(jpeg|png|gif|webp)$/;
+    if (allowed.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Only images (JPEG, PNG, GIF, WebP) are allowed for logo'));
+  },
+}).single('logo');
+
 module.exports = {
   uploadProfile,
   uploadDocument,
   uploadMarketplaceMedia,
   uploadFlatDocument,
   uploadMemberDocument,
+  uploadOnboardingLogo,
+  getOnboardingLogoRelativeUrl,
   UPLOAD_BASE,
   getGuardUploadDir,
   getRelativeUrl,

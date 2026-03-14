@@ -61,6 +61,12 @@ async function create(req, res, next) {
         'INSERT INTO residents (society_id, user_id, flat_id, is_primary) VALUES (?, ?, ?, ?)',
         [societyId, userId, flatId, isPrimary ? 1 : 0]
       );
+      // Keep directory in sync: one member row per resident (app login = directory entry)
+      await conn.execute(
+        `INSERT INTO members (society_id, flat_id, user_id, name, phone, email, role, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'resident', 'active')`,
+        [societyId, flatId, userId, name || '', phone || null, email || null]
+      ).catch(() => {}); // ignore if members table missing or duplicate
       await conn.commit();
       res.status(201).json({
         success: true,
@@ -84,16 +90,45 @@ async function remove(req, res, next) {
   try {
     const societyId = getSocietyId(req);
     const { id } = req.params;
-    const [residents] = await db.pool.execute('SELECT user_id FROM residents WHERE id = ? AND society_id = ?', [id, societyId]);
+    const [residents] = await db.pool.execute('SELECT user_id, flat_id FROM residents WHERE id = ? AND society_id = ?', [id, societyId]);
     if (!residents.length) {
       return res.status(404).json({ success: false, message: 'Resident not found' });
     }
+    const { user_id: userId, flat_id: flatId } = residents[0];
     await db.pool.execute('DELETE FROM residents WHERE id = ?', [id]);
-    await db.pool.execute('DELETE FROM users WHERE id = ?', [residents[0].user_id]);
+    // Keep directory in sync: remove member row for this user+flat
+    await db.pool.execute(
+      'DELETE FROM members WHERE society_id = ? AND user_id = ? AND flat_id = ?',
+      [societyId, userId, flatId]
+    ).catch(() => {});
+    await db.pool.execute('DELETE FROM users WHERE id = ?', [userId]);
     res.json({ success: true, message: 'Resident removed' });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { list, create, remove };
+async function setPassword(req, res, next) {
+  try {
+    const societyId = getSocietyId(req);
+    const { id } = req.params;
+    const { password } = req.body;
+    const [rows] = await db.pool.execute(
+      'SELECT r.user_id FROM residents r WHERE r.id = ? AND r.society_id = ?',
+      [id, societyId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Resident not found' });
+    }
+    const passwordHash = await bcrypt.hash(password, 10);
+    await db.pool.execute(
+      'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [passwordHash, rows[0].user_id]
+    );
+    res.json({ success: true, message: 'Password set successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, create, remove, setPassword };

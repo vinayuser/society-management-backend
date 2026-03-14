@@ -13,4 +13,8 @@ const idParam = Joi.object({
   id: Joi.number().integer().required(),
 });
 
-module.exports = { create, idParam };
+const setPassword = Joi.object({
+  password: Joi.string().min(6).required(),
+});
+
+module.exports = { create, idParam, setPassword };

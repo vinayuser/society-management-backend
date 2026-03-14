@@ -27,6 +27,7 @@ const marketplaceRoutes = require('./routes/marketplace');
 const lostFoundRoutes = require('./routes/lostFound');
 const pollsRoutes = require('./routes/polls');
 const chatRoutes = require('./routes/chat');
+const signupRequestsRoutes = require('./routes/signupRequests');
 const { getIO } = require('./socket');
 
 const app = express();
@@ -65,6 +66,7 @@ app.use('/marketplace', marketplaceRoutes);
 app.use('/lost-found', lostFoundRoutes);
 app.use('/polls', pollsRoutes);
 app.use('/chat', chatRoutes);
+app.use('/signup-requests', signupRequestsRoutes);
 
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 

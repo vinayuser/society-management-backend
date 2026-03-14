@@ -1,6 +1,57 @@
 const db = require('../config/database');
 const redis = require('../utils/redis');
 
+/** Public: list active societies for signup dropdown (id, name, alias only) */
+async function listForSignup(req, res, next) {
+  try {
+    const [rows] = await db.pool.execute(
+      `SELECT id, name, alias FROM societies WHERE status = 'active' ORDER BY name`
+    );
+    res.json({
+      success: true,
+      data: rows.map((r) => ({ id: r.id, name: r.name, alias: r.alias })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Public: list towers for a society (for signup form dropdown) */
+async function listTowersForSignup(req, res, next) {
+  try {
+    const societyId = req.params.id;
+    const [rows] = await db.pool.execute(
+      `SELECT DISTINCT tower FROM flats WHERE society_id = ? AND tower IS NOT NULL AND TRIM(tower) != '' ORDER BY tower`,
+      [societyId]
+    );
+    res.json({ success: true, data: rows.map((r) => r.tower) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Public: list flats for a society (for signup form dropdown); optional ?tower=X to filter */
+async function listFlatsForSignup(req, res, next) {
+  try {
+    const societyId = req.params.id;
+    const tower = req.query.tower;
+    let sql = `SELECT id, tower, flat_number FROM flats WHERE society_id = ?`;
+    const params = [societyId];
+    if (tower != null && String(tower).trim() !== '') {
+      sql += ` AND tower = ?`;
+      params.push(String(tower).trim());
+    }
+    sql += ` ORDER BY tower, flat_number LIMIT 500`;
+    const [rows] = await db.pool.execute(sql, params);
+    res.json({
+      success: true,
+      data: rows.map((r) => ({ id: r.id, tower: r.tower, flatNumber: r.flat_number })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function list(req, res, next) {
   try {
     const [rows] = await db.pool.execute(
@@ -233,4 +284,14 @@ async function updateConfig(req, res, next) {
   }
 }
 
-module.exports = { list, getById, getConfig, updateStatus, update, updateConfig };
+module.exports = {
+  list,
+  listForSignup,
+  listTowersForSignup,
+  listFlatsForSignup,
+  getById,
+  getConfig,
+  updateStatus,
+  update,
+  updateConfig,
+};

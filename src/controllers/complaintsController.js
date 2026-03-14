@@ -25,6 +25,10 @@ async function list(req, res, next) {
       sql += ' AND c.user_id = ?';
       params.push(userId);
     }
+    if (req.user.role === 'resident') {
+      sql += ' AND c.user_id = ?';
+      params.push(req.user.id);
+    }
     sql += ' ORDER BY c.created_at DESC';
     const [rows] = await db.pool.execute(sql, params);
     res.json({
@@ -109,4 +113,42 @@ async function updateStatus(req, res, next) {
   }
 }
 
-module.exports = { list, create, updateStatus };
+async function getOne(req, res, next) {
+  try {
+    const societyId = getSocietyId(req);
+    const { id } = req.params;
+    let sql = `SELECT c.id, c.society_id, c.user_id, c.title, c.description, c.category, c.status, c.assigned_staff_id, c.resolved_at, c.created_at,
+      u.name as user_name, u.phone as user_phone
+      FROM complaints c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.id = ? AND c.society_id = ?`;
+    const params = [id, societyId];
+    if (req.user.role === 'resident') {
+      sql += ' AND c.user_id = ?';
+      params.push(req.user.id);
+    }
+    const [rows] = await db.pool.execute(sql, params);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Complaint not found' });
+    const r = rows[0];
+    res.json({
+      success: true,
+      data: {
+        id: r.id,
+        userId: r.user_id,
+        userName: r.user_name,
+        userPhone: r.user_phone,
+        title: r.title,
+        description: r.description,
+        category: r.category,
+        status: r.status,
+        assignedStaffId: r.assigned_staff_id,
+        resolvedAt: r.resolved_at,
+        createdAt: r.created_at,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, getOne, create, updateStatus };

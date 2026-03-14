@@ -31,7 +31,7 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const { search, tower, status, page = 1, limit = 20 } = req.query;
+    const { search, tower, status, flatType, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
     const offset = (pageNum - 1) * limitNum;
@@ -56,6 +56,10 @@ async function list(req, res, next) {
       sql += ' AND f.status = ?';
       params.push(String(status).trim());
     }
+    if (flatType && String(flatType).trim()) {
+      sql += ' AND f.flat_type = ?';
+      params.push(String(flatType).trim());
+    }
 
     const countParams = [societyId];
     if (search && String(search).trim()) {
@@ -64,11 +68,13 @@ async function list(req, res, next) {
     }
     if (tower && String(tower).trim()) countParams.push(String(tower).trim());
     if (status && String(status).trim()) countParams.push(String(status).trim());
+    if (flatType && String(flatType).trim()) countParams.push(String(flatType).trim());
 
     let countSql = 'SELECT COUNT(*) AS total FROM flats f WHERE f.society_id = ?';
     if (search && String(search).trim()) countSql += ' AND (f.flat_number LIKE ? OR f.owner_name LIKE ? OR f.tower LIKE ?)';
     if (tower && String(tower).trim()) countSql += ' AND f.tower = ?';
     if (status && String(status).trim()) countSql += ' AND f.status = ?';
+    if (flatType && String(flatType).trim()) countSql += ' AND f.flat_type = ?';
     const [countRows] = await db.pool.execute(countSql, countParams);
     const total = countRows[0]?.total ?? 0;
 
@@ -247,19 +253,33 @@ async function update(req, res, next) {
 async function bulkCreate(req, res, next) {
   try {
     const societyId = getSocietyId(req);
-    const { flats } = req.body;
+    const { flats, defaults: defaultValues } = req.body;
     if (!Array.isArray(flats) || !flats.length) {
       return res.status(400).json({ success: false, message: 'flats array required' });
     }
+    const def = defaultValues || {};
     const inserted = [];
     for (const f of flats) {
       const tower = f.tower || f.towerBlock;
-      const flatNumber = f.flatNumber || f.flat_number;
+      const flatNumber = String(f.flatNumber ?? f.flat_number ?? '');
       if (!tower || !flatNumber) continue;
+      const floor = f.floor !== undefined ? f.floor : def.floor;
+      const flatType = f.flatType !== undefined && f.flatType !== '' ? f.flatType : (def.flatType || null);
+      const areaSqft = f.areaSqft !== undefined ? f.areaSqft : def.areaSqft;
+      const status = (f.status || def.status || 'active').trim() || 'active';
       try {
         const [r] = await db.pool.execute(
-          'INSERT INTO flats (society_id, tower, flat_number) VALUES (?, ?, ?)',
-          [societyId, tower, String(flatNumber)]
+          `INSERT INTO flats (society_id, tower, flat_number, floor, flat_type, area_sqft, ownership_type, owner_name, owner_contact, owner_email, status)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)`,
+          [
+            societyId,
+            tower,
+            flatNumber,
+            floor ?? null,
+            flatType,
+            areaSqft ?? null,
+            status,
+          ]
         );
         inserted.push({ id: r.insertId, tower, flatNumber });
       } catch (e) {
@@ -358,4 +378,20 @@ async function listBilling(req, res, next) {
   }
 }
 
-module.exports = { list, getOne, create, update, bulkCreate, remove, listComplaints, listBilling };
+async function getTowers(req, res, next) {
+  try {
+    const societyId = getSocietyId(req);
+    if (!societyId) {
+      return res.status(400).json({ success: false, message: 'Society context required' });
+    }
+    const [rows] = await db.pool.execute(
+      'SELECT DISTINCT tower FROM flats WHERE society_id = ? AND tower IS NOT NULL AND tower != "" ORDER BY tower',
+      [societyId]
+    );
+    res.json({ success: true, data: rows.map((r) => r.tower) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, getTowers, getOne, create, update, bulkCreate, remove, listComplaints, listBilling };
