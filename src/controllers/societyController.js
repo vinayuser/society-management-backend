@@ -55,7 +55,8 @@ async function listFlatsForSignup(req, res, next) {
 async function list(req, res, next) {
   try {
     const [rows] = await db.pool.execute(
-      `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee, s.status, s.created_at,
+      `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee,
+        s.billing_cycle, s.yearly_fee, s.status, s.created_at,
         c.logo, c.theme_color, c.address
        FROM societies s
        LEFT JOIN society_config c ON c.society_id = s.id
@@ -73,6 +74,8 @@ async function list(req, res, next) {
         planType: r.plan_type,
         setupFee: parseFloat(r.setup_fee),
         monthlyFee: parseFloat(r.monthly_fee),
+        billingCycle: r.billing_cycle || 'monthly',
+        yearlyFee: parseFloat(r.yearly_fee || 0),
         status: r.status,
         createdAt: r.created_at,
         logo: r.logo,
@@ -89,7 +92,8 @@ async function getById(req, res, next) {
   try {
     const id = req.params.id || req.societyId;
     const [rows] = await db.pool.execute(
-      `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee, s.status, s.created_at,
+      `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee,
+        s.billing_cycle, s.yearly_fee, s.status, s.created_at,
         c.logo, c.theme_color, c.address, c.banner_image, c.towers_blocks, c.total_flats, c.admin_contact_name, c.admin_contact_phone
        FROM societies s
        LEFT JOIN society_config c ON c.society_id = s.id
@@ -100,6 +104,14 @@ async function getById(req, res, next) {
       return res.status(404).json({ success: false, message: 'Society not found' });
     }
     const r = rows[0];
+    let adminUsers = [];
+    try {
+      const [users] = await db.pool.execute(
+        `SELECT id, name, email, role FROM users WHERE society_id = ? AND role = 'society_admin' ORDER BY id`,
+        [id]
+      );
+      adminUsers = users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }));
+    } catch (_) {}
     res.json({
       success: true,
       data: {
@@ -112,6 +124,8 @@ async function getById(req, res, next) {
         planType: r.plan_type,
         setupFee: parseFloat(r.setup_fee),
         monthlyFee: parseFloat(r.monthly_fee),
+        billingCycle: r.billing_cycle || 'monthly',
+        yearlyFee: parseFloat(r.yearly_fee || 0),
         status: r.status,
         createdAt: r.created_at,
         logo: r.logo,
@@ -122,6 +136,7 @@ async function getById(req, res, next) {
         totalFlats: r.total_flats,
         adminContactName: r.admin_contact_name,
         adminContactPhone: r.admin_contact_phone,
+        adminUsers,
       },
     });
   } catch (err) {
@@ -181,7 +196,7 @@ async function updateStatus(req, res, next) {
 async function update(req, res, next) {
   try {
     const societyId = req.params.id || req.societyId;
-    const { flatCount, monthlyFee, setupFee } = req.body;
+    const { flatCount, monthlyFee, setupFee, billingCycle, yearlyFee } = req.body;
     const updates = [];
     const values = [];
     if (flatCount !== undefined) {
@@ -195,6 +210,14 @@ async function update(req, res, next) {
     if (setupFee !== undefined) {
       updates.push('setup_fee = ?');
       values.push(setupFee);
+    }
+    if (billingCycle !== undefined && ['monthly', 'quarterly', 'yearly'].includes(String(billingCycle).toLowerCase())) {
+      updates.push('billing_cycle = ?');
+      values.push(String(billingCycle).toLowerCase());
+    }
+    if (yearlyFee !== undefined) {
+      updates.push('yearly_fee = ?');
+      values.push(parseFloat(yearlyFee) || 0);
     }
     if (!updates.length) {
       return res.status(400).json({ success: false, message: 'No fields to update' });

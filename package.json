@@ -11,7 +11,8 @@
     "migrate:full": "node src/database/migrate-full.js",
     "guard-migrate": "node src/database/guard-migrate.js",
     "marketplace-migrate": "node src/database/marketplace-migrate.js",
-    "seed": "node src/database/seed.js"
+    "seed": "node src/database/seed.js",
+    "seed:demo": "node src/database/seed-demo.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -22,12 +23,13 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
-    "joi": "^17.11.0",
     "helmet": "^7.1.0",
+    "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.6.5",
     "nodemailer": "^6.9.7",
+    "razorpay": "^2.9.6",
     "redis": "^4.6.11",
     "socket.io": "^4.7.2",
     "uuid": "^9.0.1"

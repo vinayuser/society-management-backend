@@ -1,7 +1,7 @@
 const Joi = require('joi');
 
 const login = Joi.object({
-  email: Joi.string().email().optional(),
+  email: Joi.string().email({ tlds: { allow: false } }).optional(),
   phone: Joi.string().optional(),
   password: Joi.string().optional(),
   otp: Joi.string().optional(),

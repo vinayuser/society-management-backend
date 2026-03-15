@@ -28,6 +28,9 @@ const lostFoundRoutes = require('./routes/lostFound');
 const pollsRoutes = require('./routes/polls');
 const chatRoutes = require('./routes/chat');
 const signupRequestsRoutes = require('./routes/signupRequests');
+const paymentsRoutes = require('./routes/payments');
+const plansRoutes = require('./routes/plans');
+const notificationsRoutes = require('./routes/notifications');
 const { getIO } = require('./socket');
 
 const app = express();
@@ -67,6 +70,9 @@ app.use('/lost-found', lostFoundRoutes);
 app.use('/polls', pollsRoutes);
 app.use('/chat', chatRoutes);
 app.use('/signup-requests', signupRequestsRoutes);
+app.use('/payments', paymentsRoutes);
+app.use('/plans', plansRoutes);
+app.use('/notifications', notificationsRoutes);
 
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 

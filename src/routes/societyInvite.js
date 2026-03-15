@@ -27,4 +27,8 @@ router.post(
   societyInviteController.acceptInvite
 );
 
+router.post('/:token/create-setup-fee-order', societyInviteController.createSetupFeeOrder);
+router.post('/:token/create-setup-order', validate(inv.createSetupOrder), societyInviteController.createSetupOrder);
+router.post('/:token/verify-payment', validate(inv.verifyPayment), societyInviteController.verifyPayment);
+
 module.exports = router;
