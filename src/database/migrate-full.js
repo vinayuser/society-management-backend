@@ -6,6 +6,7 @@
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 require('dotenv').config();
 
 const config = {
@@ -47,6 +48,19 @@ async function run() {
       if (stmt) await conn.query(stmt);
     }
     console.log('Full schema applied successfully (' + statements.length + ' tables).');
+
+    // After applying schema-full.sql, run additional ALTER/CREATE migrations.
+    // This keeps schema-full manageable, while still ensuring geo tables/columns exist.
+    await conn.end();
+    conn = null;
+    const res = spawnSync('node', ['src/database/locations-migrate.js'], {
+      cwd: path.join(__dirname, '../..'),
+      stdio: 'inherit',
+      shell: true,
+    });
+    if (res.status !== 0) {
+      throw new Error(`locations-migrate failed with exit code ${res.status}`);
+    }
   } catch (err) {
     console.error('Migration failed:', err.message);
     process.exit(1);

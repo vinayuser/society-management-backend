@@ -23,6 +23,7 @@ const migrations = [
   { name: 'marketplace', run: 'node src/database/marketplace-migrate.js' },
   { name: 'guard', run: 'node src/database/guard-migrate.js' },
   { name: 'resident-signup-requests', run: 'node src/database/run-sql-file.js src/database/resident-signup-requests-migration.sql' },
+  { name: 'locations (countries/states/cities)', run: 'node src/database/locations-migrate.js' },
   { name: 'invite-address', run: 'node src/database/invite-address-migrate.js' },
   { name: 'invite-society-id', run: 'node src/database/invite-society-id-migrate.js' },
   { name: 'payments', run: 'node src/database/payments-migrate.js' },

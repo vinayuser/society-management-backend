@@ -4,6 +4,9 @@ const createInvite = Joi.object({
   societyName: Joi.string().required().trim(),
   contactEmail: Joi.string().email().required(),
   contactPhone: Joi.string().allow('').optional().trim(),
+  countryId: Joi.number().integer().min(1).required(),
+  stateId: Joi.number().integer().min(1).required(),
+  cityId: Joi.number().integer().min(1).required(),
   flatCount: Joi.number().integer().min(0).optional(),
   planType: Joi.string().valid('shared_app', 'white_label').optional(),
   planId: Joi.number().integer().min(1).optional().allow(null),
@@ -20,6 +23,9 @@ const createSetupOrderBody = Joi.object({
 
 const acceptInvite = Joi.object({
   address: Joi.string().allow('').optional().trim(),
+  countryId: Joi.number().integer().min(1).optional(),
+  stateId: Joi.number().integer().min(1).optional(),
+  cityId: Joi.number().integer().min(1).optional(),
   themeColor: Joi.string().allow('').optional().trim(),
   logo: Joi.string().allow('').optional().trim(),
   bannerImage: Joi.string().allow('').optional().trim(),

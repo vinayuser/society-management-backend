@@ -10,6 +10,9 @@ async function createInvite(req, res, next) {
       societyName,
       contactEmail,
       contactPhone,
+      countryId,
+      stateId,
+      cityId,
       flatCount,
       planType,
       planId,
@@ -57,8 +60,8 @@ async function createInvite(req, res, next) {
     try {
       await conn.beginTransaction();
       const [invResult] = await conn.execute(
-        `INSERT INTO society_invites (society_name, email, phone, flat_count, plan_type, plan_id, setup_fee, monthly_fee, billing_cycle, yearly_fee, address, invite_token, status, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+        `INSERT INTO society_invites (society_name, email, phone, flat_count, plan_type, plan_id, setup_fee, monthly_fee, billing_cycle, yearly_fee, address, country_id, state_id, city_id, invite_token, status, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [
           societyName,
           contactEmail,
@@ -71,6 +74,9 @@ async function createInvite(req, res, next) {
           cycle,
           yFee,
           address || null,
+          countryId,
+          stateId,
+          cityId,
           inviteToken,
           expiresAt,
         ]
@@ -110,6 +116,9 @@ async function createInvite(req, res, next) {
         linkOnboarding,
         expiresAt,
         alias: finalAlias,
+        countryId,
+        stateId,
+        cityId,
       },
     });
   } catch (err) {
@@ -147,7 +156,7 @@ async function getInviteByToken(req, res, next) {
   try {
     const { token } = req.params;
     const [rows] = await db.pool.execute(
-      `SELECT id, society_name, email, phone, flat_count, plan_type, plan_id, setup_fee, monthly_fee, billing_cycle, yearly_fee, address, invite_token, status, expires_at, created_at
+      `SELECT id, society_name, email, phone, flat_count, plan_type, plan_id, setup_fee, monthly_fee, billing_cycle, yearly_fee, address, country_id, state_id, city_id, invite_token, status, expires_at, created_at
        FROM society_invites WHERE invite_token = ? AND status = 'pending'`,
       [token]
     );
@@ -198,6 +207,9 @@ async function getInviteByToken(req, res, next) {
         billingCycle: (invite.billing_cycle || 'monthly').toLowerCase(),
         yearlyFee: parseFloat(invite.yearly_fee || 0),
         address: invite.address || '',
+        countryId: invite.country_id || null,
+        stateId: invite.state_id || null,
+        cityId: invite.city_id || null,
       },
     });
   } catch (err) {
@@ -219,6 +231,9 @@ async function acceptInvite(req, res, next) {
       adminContactPhone,
       adminEmail,
       adminPassword,
+      countryId,
+      stateId,
+      cityId,
     } = req.body;
 
     const [invites] = await db.pool.execute(
@@ -231,6 +246,13 @@ async function acceptInvite(req, res, next) {
     const invite = invites[0];
     if (new Date(invite.expires_at) < new Date()) {
       return res.status(410).json({ success: false, message: 'Invitation has expired' });
+    }
+
+    const finalCountryId = countryId ?? invite.country_id;
+    const finalStateId = stateId ?? invite.state_id;
+    const finalCityId = cityId ?? invite.city_id;
+    if (!finalCountryId || !finalStateId || !finalCityId) {
+      return res.status(400).json({ success: false, message: 'Invitation location is required' });
     }
 
     const alias = invite.society_name
@@ -261,8 +283,8 @@ async function acceptInvite(req, res, next) {
     try {
       await conn.beginTransaction();
       const [socResult] = await conn.execute(
-        `INSERT INTO societies (name, alias, email, phone, flat_count, plan_type, setup_fee, monthly_fee, billing_cycle, yearly_fee, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'onboarding_completed')`,
+        `INSERT INTO societies (name, alias, email, phone, flat_count, plan_type, setup_fee, monthly_fee, billing_cycle, yearly_fee, country_id, state_id, city_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'onboarding_completed')`,
         [
           invite.society_name,
           finalAlias,
@@ -274,6 +296,9 @@ async function acceptInvite(req, res, next) {
           invite.monthly_fee,
           billingCycle,
           yearlyFee,
+          finalCountryId,
+          finalStateId,
+          finalCityId,
         ]
       );
       societyId = socResult.insertId;
@@ -300,8 +325,8 @@ async function acceptInvite(req, res, next) {
 
       const societyAddress = address !== undefined && address !== '' ? address : (invite.address || null);
       await conn.execute(
-        `INSERT INTO society_config (society_id, logo, theme_color, address, banner_image, towers_blocks, total_flats, admin_contact_name, admin_contact_phone)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO society_config (society_id, logo, theme_color, address, banner_image, towers_blocks, total_flats, admin_contact_name, admin_contact_phone, country_id, state_id, city_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           societyId,
           logo || null,
@@ -312,6 +337,9 @@ async function acceptInvite(req, res, next) {
           totalFlats ?? invite.flat_count,
           adminContactName || null,
           adminContactPhone || null,
+          finalCountryId,
+          finalStateId,
+          finalCityId,
         ]
       );
 
@@ -363,7 +391,7 @@ async function acceptInvite(req, res, next) {
 async function listInvites(req, res, next) {
   try {
     const [rows] = await db.pool.execute(
-      `SELECT i.id, i.society_name, i.email, i.phone, i.flat_count, i.plan_type, i.plan_id, i.setup_fee, i.monthly_fee, i.billing_cycle, i.yearly_fee, i.address, i.invite_token, i.status, i.expires_at, i.created_at,
+      `SELECT i.id, i.society_name, i.email, i.phone, i.flat_count, i.plan_type, i.plan_id, i.setup_fee, i.monthly_fee, i.billing_cycle, i.yearly_fee, i.address, i.country_id, i.state_id, i.city_id, i.invite_token, i.status, i.expires_at, i.created_at,
         p.name as plan_name
        FROM society_invites i
        LEFT JOIN society_plans p ON p.id = i.plan_id
@@ -400,6 +428,9 @@ async function listInvites(req, res, next) {
           billingCycle: (r.billing_cycle || 'monthly').toLowerCase(),
           yearlyFee: parseFloat(r.yearly_fee || 0),
           address: r.address || '',
+          countryId: r.country_id || null,
+          stateId: r.state_id || null,
+          cityId: r.city_id || null,
           inviteToken: r.invite_token,
           status: r.status,
           linkSetupFee: linkSetupFee || undefined,

@@ -2,6 +2,9 @@ const Joi = require('joi');
 
 const create = Joi.object({
   societyId: Joi.number().integer().required(),
+  countryId: Joi.number().integer().min(1).required(),
+  stateId: Joi.number().integer().min(1).required(),
+  cityId: Joi.number().integer().min(1).required(),
   name: Joi.string().required().trim(),
   email: Joi.string().email().required(),
   phone: Joi.string().allow('').optional().trim(),

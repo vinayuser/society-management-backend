@@ -4,9 +4,36 @@ const redis = require('../utils/redis');
 /** Public: list active societies for signup dropdown (id, name, alias only) */
 async function listForSignup(req, res, next) {
   try {
-    const [rows] = await db.pool.execute(
-      `SELECT id, name, alias FROM societies WHERE status = 'active' ORDER BY name`
-    );
+    const { countryId, stateId, cityId, q } = req.query;
+
+    let sql = `SELECT s.id, s.name, s.alias
+               FROM societies s
+               LEFT JOIN society_config c ON c.society_id = s.id
+               WHERE s.status = 'active'`;
+    const params = [];
+
+    if (countryId != null && String(countryId).trim() !== '') {
+      sql += ' AND s.country_id = ?';
+      params.push(String(countryId).trim());
+    }
+    if (stateId != null && String(stateId).trim() !== '') {
+      sql += ' AND s.state_id = ?';
+      params.push(String(stateId).trim());
+    }
+    if (cityId != null && String(cityId).trim() !== '') {
+      sql += ' AND s.city_id = ?';
+      params.push(String(cityId).trim());
+    }
+
+    const qTrim = q != null ? String(q).trim() : '';
+    if (qTrim) {
+      sql += ' AND (s.name LIKE ? OR s.alias LIKE ? OR c.address LIKE ?)';
+      params.push(`%${qTrim}%`, `%${qTrim}%`, `%${qTrim}%`);
+    }
+
+    sql += ' ORDER BY s.name LIMIT 200';
+
+    const [rows] = await db.pool.execute(sql, params);
     res.json({
       success: true,
       data: rows.map((r) => ({ id: r.id, name: r.name, alias: r.alias })),

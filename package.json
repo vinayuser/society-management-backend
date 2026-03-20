@@ -12,7 +12,8 @@
     "guard-migrate": "node src/database/guard-migrate.js",
     "marketplace-migrate": "node src/database/marketplace-migrate.js",
     "seed": "node src/database/seed.js",
-    "seed:demo": "node src/database/seed-demo.js"
+    "seed:demo": "node src/database/seed-demo.js",
+    "seed:locations": "node src/database/seed-locations.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -32,7 +33,8 @@
     "razorpay": "^2.9.6",
     "redis": "^4.6.11",
     "socket.io": "^4.7.2",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "country-state-city": "^3.2.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

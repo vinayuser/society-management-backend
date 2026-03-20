@@ -9,9 +9,9 @@ function getSocietyId(req) {
 /** Public: create a signup request (member wants to join society) */
 async function create(req, res, next) {
   try {
-    const { societyId, name, email, phone, tower, flatNumber, password } = req.body;
+    const { societyId, countryId, stateId, cityId, name, email, phone, tower, flatNumber, password } = req.body;
     const [societies] = await db.pool.execute(
-      'SELECT id, name, status FROM societies WHERE id = ?',
+      'SELECT id, name, status, country_id, state_id, city_id FROM societies WHERE id = ?',
       [societyId]
     );
     if (!societies.length) {
@@ -20,6 +20,19 @@ async function create(req, res, next) {
     if (societies[0].status !== 'active') {
       return res.status(400).json({ success: false, message: 'Society is not accepting signups' });
     }
+
+    const societyRow = societies[0];
+    if (!societyRow.country_id || !societyRow.state_id || !societyRow.city_id) {
+      return res.status(400).json({ success: false, message: 'Society location not configured' });
+    }
+    if (
+      Number(societyRow.country_id) !== Number(countryId) ||
+      Number(societyRow.state_id) !== Number(stateId) ||
+      Number(societyRow.city_id) !== Number(cityId)
+    ) {
+      return res.status(400).json({ success: false, message: 'Selected location does not match society address' });
+    }
+
     const [flatRows] = await db.pool.execute(
       'SELECT id FROM flats WHERE society_id = ? AND tower = ? AND flat_number = ?',
       [societyId, tower.trim(), flatNumber.trim()]
@@ -43,9 +56,21 @@ async function create(req, res, next) {
     }
     const passwordHash = await bcrypt.hash(password, 10);
     const [result] = await db.pool.execute(
-      `INSERT INTO resident_signup_requests (society_id, name, email, phone, tower, flat_number, password_hash, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [societyId, name.trim(), email.trim(), (phone || '').trim() || null, tower.trim(), flatNumber.trim(), passwordHash]
+      `INSERT INTO resident_signup_requests
+        (society_id, country_id, state_id, city_id, name, email, phone, tower, flat_number, password_hash, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        societyId,
+        countryId,
+        stateId,
+        cityId,
+        name.trim(),
+        email.trim(),
+        (phone || '').trim() || null,
+        tower.trim(),
+        flatNumber.trim(),
+        passwordHash,
+      ]
     );
     const requestId = result.insertId;
     const societyName = societies[0].name;
@@ -78,7 +103,7 @@ async function list(req, res, next) {
   try {
     const societyId = getSocietyId(req);
     const { status } = req.query;
-    let sql = `SELECT id, society_id, name, email, phone, tower, flat_number, status, rejection_reason, reviewed_at, created_at
+    let sql = `SELECT id, society_id, country_id, state_id, city_id, name, email, phone, tower, flat_number, status, rejection_reason, reviewed_at, created_at
                FROM resident_signup_requests WHERE society_id = ?`;
     const params = [societyId];
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
@@ -92,6 +117,9 @@ async function list(req, res, next) {
       data: rows.map((r) => ({
         id: r.id,
         societyId: r.society_id,
+        countryId: r.country_id,
+        stateId: r.state_id,
+        cityId: r.city_id,
         name: r.name,
         email: r.email,
         phone: r.phone,

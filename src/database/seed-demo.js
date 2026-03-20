@@ -77,6 +77,41 @@ async function run() {
     const society2 = socRows[1];
     console.log('Created 2 societies:', society1.name, ',', society2.name);
 
+    // --- Location backfill for demo societies (best-effort) ---
+    // Requires: countries/states/cities tables already seeded via `npm run seed:locations`.
+    try {
+      const [countryRows] = await conn.execute("SELECT id FROM countries WHERE iso2 = 'IN' LIMIT 1");
+      if (countryRows.length) {
+        const countryId = countryRows[0].id;
+        const [stateRows] = await conn.execute(
+          'SELECT id FROM states WHERE country_id = ? AND name = ? LIMIT 1',
+          [countryId, 'Maharashtra']
+        );
+        if (stateRows.length) {
+          const stateId = stateRows[0].id;
+          const [cityMumbaiRows] = await conn.execute(
+            'SELECT id FROM cities WHERE state_id = ? AND name = ? LIMIT 1',
+            [stateId, 'Mumbai']
+          );
+          const [cityPuneRows] = await conn.execute(
+            'SELECT id FROM cities WHERE state_id = ? AND name = ? LIMIT 1',
+            [stateId, 'Pune']
+          );
+          const cityMumbaiId = cityMumbaiRows[0]?.id;
+          const cityPuneId = cityPuneRows[0]?.id;
+
+          if (cityMumbaiId) {
+            await conn.execute('UPDATE societies SET country_id = ?, state_id = ?, city_id = ? WHERE id = ?', [countryId, stateId, cityMumbaiId, society1.id]);
+          }
+          if (cityPuneId) {
+            await conn.execute('UPDATE societies SET country_id = ?, state_id = ?, city_id = ? WHERE id = ?', [countryId, stateId, cityPuneId, society2.id]);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Location backfill skipped:', e.message);
+    }
+
     // --- Society config ---
     await conn.execute(
       `INSERT INTO society_config (society_id, logo, theme_color, address, banner_image, towers_blocks, total_flats, admin_contact_name, admin_contact_phone) VALUES
@@ -114,6 +149,34 @@ async function run() {
       [expiresAt, planId1, expiresAt, society1.id, planId1]
     );
     console.log('Created society invites (pending + accepted).');
+
+    // --- Location backfill for demo invites (best-effort) ---
+    try {
+      const [countryRows] = await conn.execute("SELECT id FROM countries WHERE iso2 = 'IN' LIMIT 1");
+      if (countryRows.length) {
+        const countryId = countryRows[0].id;
+        const [stateRows] = await conn.execute('SELECT id FROM states WHERE country_id = ? AND name = ? LIMIT 1', [
+          countryId,
+          'Maharashtra',
+        ]);
+        if (stateRows.length) {
+          const stateId = stateRows[0].id;
+          const [cityRows] = await conn.execute('SELECT id FROM cities WHERE state_id = ? AND name = ? LIMIT 1', [
+            stateId,
+            'Mumbai',
+          ]);
+          const cityId = cityRows[0]?.id;
+          if (cityId) {
+            await conn.execute(
+              'UPDATE society_invites SET country_id = ?, state_id = ?, city_id = ? WHERE invite_token IN (?, ?)',
+              [countryId, stateId, cityId, 'demo-invite-pending-token-001', 'demo-invite-accepted-token-002']
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Invite location backfill skipped:', e.message);
+    }
 
     // --- Billing (mix of paid and pending) ---
     const due1 = `${year}-${String(thisMonth).padStart(2, '0')}-01`;
