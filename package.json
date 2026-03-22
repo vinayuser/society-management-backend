@@ -7,13 +7,8 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "migrate": "node src/database/migrate.js",
-    "migrate:all": "node src/database/run-all-migrations.js",
-    "migrate:full": "node src/database/migrate-full.js",
-    "guard-migrate": "node src/database/guard-migrate.js",
-    "marketplace-migrate": "node src/database/marketplace-migrate.js",
     "seed": "node src/database/seed.js",
-    "seed:demo": "node src/database/seed-demo.js",
-    "seed:locations": "node src/database/seed-locations.js"
+    "seed:demo": "node src/database/seed.js --demo"
   },
   "engines": {
     "node": ">=18.0.0"

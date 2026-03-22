@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -11,6 +12,11 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM residents r WHERE r.society_id = ?',
+      [societyId]
+    );
     const [rows] = await db.pool.execute(
       `SELECT r.id, r.society_id, r.user_id, r.flat_id, r.is_primary, r.created_at,
         u.name, u.email, u.phone, u.role,
@@ -19,12 +25,12 @@ async function list(req, res, next) {
        JOIN users u ON u.id = r.user_id
        JOIN flats f ON f.id = r.flat_id
        WHERE r.society_id = ?
-       ORDER BY f.tower, f.flat_number, u.name`,
+       ORDER BY f.tower, f.flat_number, u.name LIMIT ${limit} OFFSET ${offset}`,
       [societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         userId: r.user_id,
         flatId: r.flat_id,
@@ -37,7 +43,8 @@ async function list(req, res, next) {
         flatNumber: r.flat_number,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

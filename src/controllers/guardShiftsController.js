@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -26,9 +27,12 @@ async function list(req, res, next) {
     const params = [societyId, guardId];
     if (from) { sql += ' AND shift_start >= ?'; params.push(from); }
     if (to) { sql += ' AND shift_end <= ?'; params.push(to); }
-    sql += ' ORDER BY shift_start';
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS gs_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY shift_start LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({ success: true, data: rows.map(mapShift) });
+    jsonCollection(res, rows.map(mapShift), { page, limit, total: total ?? 0 });
   } catch (err) {
     next(err);
   }

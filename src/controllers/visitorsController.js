@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -31,11 +32,14 @@ async function list(req, res, next) {
     if (exitNull === 'true' || exitNull === '1') {
       sql += ' AND v.exit_time IS NULL';
     }
-    sql += ' ORDER BY v.entry_time DESC LIMIT 200';
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 200 });
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS vis_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY v.entry_time DESC LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         flatId: r.flat_id,
         tower: r.tower,
@@ -48,7 +52,8 @@ async function list(req, res, next) {
         visitorType: r.visitor_type,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

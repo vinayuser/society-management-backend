@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getRelativeUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -25,12 +26,17 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const [rows] = await db.pool.execute(
-      `SELECT id, guard_id, society_id, document_name, document_type, file_url, expiry_date, uploaded_at
-       FROM guard_documents WHERE society_id = ? AND guard_id = ? ORDER BY uploaded_at DESC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM guard_documents WHERE society_id = ? AND guard_id = ?',
       [societyId, guardId]
     );
-    res.json({ success: true, data: rows.map(mapDoc) });
+    const [rows] = await db.pool.execute(
+      `SELECT id, guard_id, society_id, document_name, document_type, file_url, expiry_date, uploaded_at
+       FROM guard_documents WHERE society_id = ? AND guard_id = ? ORDER BY uploaded_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, guardId]
+    );
+    jsonCollection(res, rows.map(mapDoc), { page, limit, total: total ?? 0 });
   } catch (err) {
     next(err);
   }

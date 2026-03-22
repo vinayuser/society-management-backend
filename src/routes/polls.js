@@ -15,6 +15,7 @@ const router = express.Router();
 router.use(authenticate, scopeToUserSociety);
 
 router.get('/', allowList(['society_admin', 'resident', 'super_admin']), pollsController.list);
+router.get('/:id', allowList(['society_admin', 'resident', 'super_admin']), validate(p.idParam, 'params'), pollsController.getOne);
 router.post('/', allowList(['society_admin', 'super_admin']), validate(p.create), pollsController.create);
 router.post('/:id/vote', allowList(['resident', 'society_admin', 'super_admin']), validate(p.idParam, 'params'), validate(p.vote), pollsController.vote);
 router.delete('/:id', allowList(['society_admin', 'super_admin']), validate(p.idParam, 'params'), pollsController.remove);

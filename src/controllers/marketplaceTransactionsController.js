@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -8,12 +9,11 @@ async function list(req, res, next) {
   try {
     const societyId = getSocietyId(req);
     if (!societyId) return res.status(400).json({ success: false, message: 'Society context required' });
-    const { page = 1, limit = 20 } = req.query;
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
-    const offset = (Math.max(1, parseInt(page, 10)) - 1) * limitNum;
-    const limitInt = parseInt(limitNum, 10);
-    const offsetInt = parseInt(offset, 10);
-
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM marketplace_transactions t WHERE t.society_id = ?',
+      [societyId]
+    );
     const [rows] = await db.pool.execute(
       `SELECT t.id, t.buyer_user_id, t.seller_user_id, t.item_id, t.society_id, t.transaction_status, t.created_at,
         b.name as buyer_name, s.name as seller_name, m.title as item_title, m.price as item_price
@@ -22,12 +22,12 @@ async function list(req, res, next) {
        JOIN users s ON s.id = t.seller_user_id
        JOIN marketplace_items m ON m.id = t.item_id
        WHERE t.society_id = ?
-       ORDER BY t.created_at DESC LIMIT ${limitInt} OFFSET ${offsetInt}`,
+       ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`,
       [societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         buyerUserId: r.buyer_user_id,
         sellerUserId: r.seller_user_id,
@@ -40,7 +40,8 @@ async function list(req, res, next) {
         itemTitle: r.item_title,
         itemPrice: r.item_price != null ? parseFloat(r.item_price) : null,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

@@ -208,6 +208,45 @@ const uploadOnboardingLogo = multer({
   },
 }).single('logo');
 
+/** Platform-wide ads use segment `platform` (path uploads/ads/platform/). */
+function getAdsUploadDir(segment) {
+  const dir = path.join(UPLOAD_BASE, 'ads', String(segment || 'platform'));
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+  }
+  return dir;
+}
+
+function adsMediaRelativeUrl(segment, filename) {
+  return `/uploads/ads/${segment}/${filename}`;
+}
+
+const adsStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    const seg = req.adsUploadSegment || 'platform';
+    cb(null, getAdsUploadDir(seg));
+  },
+  filename(req, file, cb) {
+    const ext = (file.originalname && path.extname(file.originalname)) || '.bin';
+    cb(null, `ad_${Date.now()}${ext}`);
+  },
+});
+
+const uploadAdMedia = multer({
+  storage: adsStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(req, file, cb) {
+    const allowed = /^(image\/(jpeg|png|gif|webp)|video\/(mp4|webm))$/;
+    if (allowed.test(file.mimetype)) return cb(null, true);
+    cb(new Error('Only images (JPEG, PNG, GIF, WebP) and videos (MP4, WebM) are allowed'));
+  },
+}).single('file');
+
+/** Same as uploadAdMedia; use after setting req.adsUploadSegment (default platform). */
+const uploadAdOptionalFile = uploadAdMedia;
+
 module.exports = {
   uploadProfile,
   uploadDocument,
@@ -216,6 +255,10 @@ module.exports = {
   uploadMemberDocument,
   uploadOnboardingLogo,
   getOnboardingLogoRelativeUrl,
+  getAdsUploadDir,
+  adsMediaRelativeUrl,
+  uploadAdMedia,
+  uploadAdOptionalFile,
   UPLOAD_BASE,
   getGuardUploadDir,
   getRelativeUrl,

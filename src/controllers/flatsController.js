@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -31,14 +32,12 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const { search, tower, status, flatType, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { search, tower, status, flatType } = req.query;
+    const { page: pageNum, limit: limitNum, offset } = normalizePageLimit(req.query);
 
     let sql = `SELECT f.id, f.society_id, f.tower, f.flat_number, f.floor, f.flat_type, f.area_sqft, f.ownership_type,
       f.owner_name, f.owner_contact, f.owner_email, f.status, f.created_at, f.updated_at,
-      ((SELECT COUNT(*) FROM flat_members fm WHERE fm.flat_id = f.id AND fm.society_id = f.society_id) + (SELECT COUNT(*) FROM members m WHERE m.flat_id = f.id AND m.society_id = f.society_id)) AS members_count,
+      (SELECT COUNT(*) FROM members m WHERE m.flat_id = f.id AND m.society_id = f.society_id) AS members_count,
       (SELECT COUNT(*) FROM flat_vehicles fv WHERE fv.flat_id = f.id AND fv.society_id = f.society_id) AS vehicles_count
       FROM flats f WHERE f.society_id = ?`;
     const params = [societyId];
@@ -81,11 +80,7 @@ async function list(req, res, next) {
     sql += ` ORDER BY f.tower, f.flat_number LIMIT ${limitNum} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
 
-    res.json({
-      success: true,
-      data: rows.map(mapFlat),
-      pagination: { page: pageNum, limit: limitNum, total },
-    });
+    jsonCollection(res, rows.map(mapFlat), { page: pageNum, limit: limitNum, total });
   } catch (err) {
     next(err);
   }
@@ -314,18 +309,25 @@ async function listComplaints(req, res, next) {
     if (!flatCheck.length) {
       return res.status(404).json({ success: false, message: 'Flat not found' });
     }
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      `SELECT COUNT(*) AS total FROM complaints c
+       JOIN residents r ON r.user_id = c.user_id AND r.flat_id = ?
+       WHERE c.society_id = ?`,
+      [flatId, societyId]
+    );
     const [rows] = await db.pool.execute(
       `SELECT c.id, c.user_id, c.title, c.description, c.category, c.status, c.resolved_at, c.created_at, u.name AS user_name, u.phone AS user_phone
        FROM complaints c
        JOIN users u ON u.id = c.user_id
        JOIN residents r ON r.user_id = c.user_id AND r.flat_id = ?
        WHERE c.society_id = ?
-       ORDER BY c.created_at DESC`,
+       ORDER BY c.created_at DESC LIMIT ${limit} OFFSET ${offset}`,
       [flatId, societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         userId: r.user_id,
         userName: r.user_name,
@@ -337,7 +339,8 @@ async function listComplaints(req, res, next) {
         resolvedAt: r.resolved_at,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -351,14 +354,19 @@ async function listBilling(req, res, next) {
     if (!flatCheck.length) {
       return res.status(404).json({ success: false, message: 'Flat not found' });
     }
-    const [rows] = await db.pool.execute(
-      `SELECT id, society_id, flat_id, amount, type, billing_date, due_date, payment_status, paid_at, invoice_number, notes, created_at
-       FROM billing WHERE society_id = ? AND flat_id = ? ORDER BY billing_date DESC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM billing WHERE society_id = ? AND flat_id = ?',
       [societyId, flatId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, flat_id, amount, type, billing_date, due_date, payment_status, paid_at, invoice_number, notes, created_at
+       FROM billing WHERE society_id = ? AND flat_id = ? ORDER BY billing_date DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, flatId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         societyId: r.society_id,
         flatId: r.flat_id,
@@ -372,7 +380,8 @@ async function listBilling(req, res, next) {
         notes: r.notes,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -388,7 +397,8 @@ async function getTowers(req, res, next) {
       'SELECT DISTINCT tower FROM flats WHERE society_id = ? AND tower IS NOT NULL AND tower != "" ORDER BY tower',
       [societyId]
     );
-    res.json({ success: true, data: rows.map((r) => r.tower) });
+    const towers = rows.map((r) => r.tower);
+    jsonCollection(res, towers, { page: 1, limit: Math.max(towers.length, 1), total: towers.length });
   } catch (err) {
     next(err);
   }

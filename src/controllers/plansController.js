@@ -1,14 +1,20 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 async function list(req, res, next) {
   try {
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 20, maxLimit: 100 });
+    const [countRows] = await db.pool.execute('SELECT COUNT(*) AS total FROM society_plans');
+    const total = Number(countRows[0]?.total ?? 0);
     const [rows] = await db.pool.execute(
       `SELECT id, name, slug, billing_cycle, monthly_fee, yearly_fee, description, is_active, created_at
-       FROM society_plans ORDER BY monthly_fee ASC`
+       FROM society_plans ORDER BY monthly_fee ASC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         name: r.name,
         slug: r.slug,
@@ -19,7 +25,8 @@ async function list(req, res, next) {
         isActive: Boolean(r.is_active),
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total }
+    );
   } catch (err) {
     next(err);
   }

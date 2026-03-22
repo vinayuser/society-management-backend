@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const redis = require('../utils/redis');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 /** Public: list active societies for signup dropdown (id, name, alias only) */
 async function listForSignup(req, res, next) {
@@ -31,13 +32,16 @@ async function listForSignup(req, res, next) {
       params.push(`%${qTrim}%`, `%${qTrim}%`, `%${qTrim}%`);
     }
 
-    sql += ' ORDER BY s.name LIMIT 200';
-
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 200 });
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS soc_signup_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY s.name LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({
-      success: true,
-      data: rows.map((r) => ({ id: r.id, name: r.name, alias: r.alias })),
-    });
+    jsonCollection(
+      res,
+      rows.map((r) => ({ id: r.id, name: r.name, alias: r.alias })),
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -51,7 +55,8 @@ async function listTowersForSignup(req, res, next) {
       `SELECT DISTINCT tower FROM flats WHERE society_id = ? AND tower IS NOT NULL AND TRIM(tower) != '' ORDER BY tower`,
       [societyId]
     );
-    res.json({ success: true, data: rows.map((r) => r.tower) });
+    const towers = rows.map((r) => r.tower);
+    jsonCollection(res, towers, { page: 1, limit: Math.max(towers.length, 1), total: towers.length });
   } catch (err) {
     next(err);
   }
@@ -68,12 +73,16 @@ async function listFlatsForSignup(req, res, next) {
       sql += ` AND tower = ?`;
       params.push(String(tower).trim());
     }
-    sql += ` ORDER BY tower, flat_number LIMIT 500`;
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 500 });
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS flat_signup_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY tower, flat_number LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({
-      success: true,
-      data: rows.map((r) => ({ id: r.id, tower: r.tower, flatNumber: r.flat_number })),
-    });
+    jsonCollection(
+      res,
+      rows.map((r) => ({ id: r.id, tower: r.tower, flatNumber: r.flat_number })),
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -81,17 +90,22 @@ async function listFlatsForSignup(req, res, next) {
 
 async function list(req, res, next) {
   try {
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 20, maxLimit: 100 });
+    const [countRows] = await db.pool.execute('SELECT COUNT(*) AS total FROM societies');
+    const total = Number(countRows[0]?.total ?? 0);
     const [rows] = await db.pool.execute(
       `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee,
         s.billing_cycle, s.yearly_fee, s.status, s.created_at,
         c.logo, c.theme_color, c.address
        FROM societies s
        LEFT JOIN society_config c ON c.society_id = s.id
-       ORDER BY s.created_at DESC`
+       ORDER BY s.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         name: r.name,
         alias: r.alias,
@@ -109,7 +123,8 @@ async function list(req, res, next) {
         themeColor: r.theme_color,
         address: r.address,
       })),
-    });
+      { page, limit, total }
+    );
   } catch (err) {
     next(err);
   }

@@ -3,6 +3,7 @@ const db = require('../config/database');
 const config = require('../config');
 const emailService = require('../services/emailService');
 const { getOnboardingLogoRelativeUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 async function createInvite(req, res, next) {
   try {
@@ -390,12 +391,17 @@ async function acceptInvite(req, res, next) {
 
 async function listInvites(req, res, next) {
   try {
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 20, maxLimit: 100 });
+    const [countRows] = await db.pool.execute('SELECT COUNT(*) AS total FROM society_invites');
+    const total = Number(countRows[0]?.total ?? 0);
     const [rows] = await db.pool.execute(
       `SELECT i.id, i.society_name, i.email, i.phone, i.flat_count, i.plan_type, i.plan_id, i.setup_fee, i.monthly_fee, i.billing_cycle, i.yearly_fee, i.address, i.country_id, i.state_id, i.city_id, i.invite_token, i.status, i.expires_at, i.created_at,
         p.name as plan_name
        FROM society_invites i
        LEFT JOIN society_plans p ON p.id = i.plan_id
-       ORDER BY i.created_at DESC`
+       ORDER BY i.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
     const baseUrl = (config.platform.inviteBaseUrl || '').replace(/\/$/, '');
     const inviteIdsWithSetup = rows.filter((r) => parseFloat(r.setup_fee) > 0).map((r) => r.id);
@@ -407,9 +413,9 @@ async function listInvites(req, res, next) {
       );
       paid.forEach((p) => setupPaidSet.add(p.invite_id));
     }
-    res.json({
-      success: true,
-      data: rows.map((r) => {
+    jsonCollection(
+      res,
+      rows.map((r) => {
         const setupFeeAmount = parseFloat(r.setup_fee) || 0;
         const linkOnboarding = `${baseUrl}/${r.invite_token}`;
         const linkSetupFee = setupFeeAmount > 0 ? `${linkOnboarding}?step=setup_fee` : null;
@@ -439,7 +445,8 @@ async function listInvites(req, res, next) {
           createdAt: r.created_at,
         };
       }),
-    });
+      { page, limit, total }
+    );
   } catch (err) {
     next(err);
   }

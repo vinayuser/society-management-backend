@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { marketplaceFileUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -47,9 +47,8 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const { status, category, minPrice, maxPrice, condition, page = 1, limit = 20 } = req.query;
-    const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const { status, category, minPrice, maxPrice, condition } = req.query;
+    const { page: pageNum, limit: limitNum, offset } = normalizePageLimit(req.query);
 
     let sql = `SELECT ${SELECT_COLS} FROM marketplace_items m JOIN users u ON u.id = m.user_id WHERE m.society_id = ?`;
     const params = [societyId];
@@ -75,8 +74,8 @@ async function list(req, res, next) {
       sql += ' AND m.item_condition = ?';
       params.push(condition);
     }
-    const limitInt = parseInt(limitNum, 10) || 20;
-    const offsetInt = parseInt(offset, 10) || 0;
+    const limitInt = limitNum;
+    const offsetInt = offset;
     sql += ` ORDER BY m.is_pinned DESC, m.created_at DESC LIMIT ${limitInt} OFFSET ${offsetInt}`;
 
     const countParams = [societyId];
@@ -91,11 +90,7 @@ async function list(req, res, next) {
 
     const [rows] = await db.pool.execute(sql, params);
 
-    res.json({
-      success: true,
-      data: rows.map(mapItem),
-      pagination: { page: parseInt(page, 10), limit: limitNum, total },
-    });
+    jsonCollection(res, rows.map(mapItem), { page: pageNum, limit: limitNum, total });
   } catch (err) {
     next(err);
   }
@@ -103,9 +98,8 @@ async function list(req, res, next) {
 
 async function listGlobal(req, res, next) {
   try {
-    const { societyId, category, minPrice, maxPrice, condition, sort = 'newest', page = 1, limit = 20 } = req.query;
-    const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+    const { societyId, category, minPrice, maxPrice, condition, sort = 'newest' } = req.query;
+    const { page: pageNum, limit: limitNum, offset } = normalizePageLimit(req.query);
 
     let sql = `SELECT ${SELECT_COLS}, s.name as society_name FROM marketplace_items m
       JOIN users u ON u.id = m.user_id
@@ -137,12 +131,39 @@ async function listGlobal(req, res, next) {
     if (sort === 'price_asc') sql += ' ORDER BY m.price IS NULL, m.price ASC, m.created_at DESC';
     else if (sort === 'price_desc') sql += ' ORDER BY m.price DESC, m.created_at DESC';
     else sql += ' ORDER BY m.is_pinned DESC, m.created_at DESC';
-    const limitInt = parseInt(limitNum, 10) || 20;
-    const offsetInt = parseInt(offset, 10) || 0;
+    const limitInt = limitNum;
+    const offsetInt = offset;
     sql += ` LIMIT ${limitInt} OFFSET ${offsetInt}`;
 
+    const countParams = [];
+    let countSql = `SELECT COUNT(*) as total FROM marketplace_items m
+      JOIN societies s ON s.id = m.society_id
+      WHERE m.listed_globally = 1 AND m.status = 'active'`;
+    if (societyId && parseInt(societyId, 10)) {
+      countSql += ' AND m.society_id = ?';
+      countParams.push(societyId);
+    }
+    if (category && String(category).trim()) {
+      countSql += ' AND m.category = ?';
+      countParams.push(String(category).trim());
+    }
+    if (!Number.isNaN(minPriceNum)) {
+      countSql += ' AND m.price >= ?';
+      countParams.push(minPriceNum);
+    }
+    if (!Number.isNaN(maxPriceNum)) {
+      countSql += ' AND m.price <= ?';
+      countParams.push(maxPriceNum);
+    }
+    if (condition && ['new', 'used'].includes(condition)) {
+      countSql += ' AND m.item_condition = ?';
+      countParams.push(condition);
+    }
+    const [countResult] = await db.pool.execute(countSql, countParams);
+    const total = countResult[0]?.total ?? 0;
+
     const [rows] = await db.pool.execute(sql, params);
-    res.json({ success: true, data: rows.map(mapItem), pagination: { page: parseInt(page, 10), limit: limitNum } });
+    jsonCollection(res, rows.map(mapItem), { page: pageNum, limit: limitNum, total });
   } catch (err) {
     next(err);
   }

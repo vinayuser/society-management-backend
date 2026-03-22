@@ -1,9 +1,12 @@
 const locationsService = require('../services/locationsService');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 async function listCountries(req, res, next) {
   try {
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 100, maxLimit: 500 });
     const countries = await locationsService.listCountries();
-    res.json({ success: true, data: countries.map((c) => ({ id: c.id, iso2: c.iso2, name: c.name })) });
+    const mapped = countries.map((c) => ({ id: c.id, iso2: c.iso2, name: c.name }));
+    jsonCollection(res, mapped.slice(offset, offset + limit), { page, limit, total: mapped.length });
   } catch (err) {
     next(err);
   }
@@ -15,8 +18,10 @@ async function listStates(req, res, next) {
     if (countryId == null || String(countryId).trim() === '') {
       return res.status(400).json({ success: false, message: 'countryId is required' });
     }
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 100, maxLimit: 500 });
     const states = await locationsService.listStates(Number(countryId));
-    res.json({ success: true, data: states.map((s) => ({ id: s.id, name: s.name, stateCode: s.state_code, isPinned: !!s.is_pinned, pinnedRank: s.pinned_rank })) });
+    const mapped = states.map((s) => ({ id: s.id, name: s.name, stateCode: s.state_code, isPinned: !!s.is_pinned, pinnedRank: s.pinned_rank }));
+    jsonCollection(res, mapped.slice(offset, offset + limit), { page, limit, total: mapped.length });
   } catch (err) {
     next(err);
   }
@@ -28,8 +33,10 @@ async function listCities(req, res, next) {
     if (stateId == null || String(stateId).trim() === '') {
       return res.status(400).json({ success: false, message: 'stateId is required' });
     }
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 100, maxLimit: 500 });
     const cities = await locationsService.listCities(Number(stateId));
-    res.json({ success: true, data: cities.map((c) => ({ id: c.id, name: c.name, cityCode: c.city_code })) });
+    const mapped = cities.map((c) => ({ id: c.id, name: c.name, cityCode: c.city_code }));
+    jsonCollection(res, mapped.slice(offset, offset + limit), { page, limit, total: mapped.length });
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const config = require('../config');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -11,7 +12,7 @@ async function list(req, res, next) {
     if (!societyId && req.user?.role !== config.roles.SUPER_ADMIN) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    let sql = `SELECT b.id, b.society_id, b.amount, b.type, b.billing_date, b.due_date, b.payment_status, b.paid_at, b.reminder_sent_at, b.invoice_number, b.notes, b.created_at,
+    let sql = `SELECT b.id, b.society_id, b.flat_id, b.amount, b.type, b.billing_date, b.due_date, b.payment_status, b.paid_at, b.reminder_sent_at, b.invoice_number, b.notes, b.created_at,
       s.name as society_name, s.alias as society_alias
       FROM billing b
       LEFT JOIN societies s ON s.id = b.society_id
@@ -21,32 +22,55 @@ async function list(req, res, next) {
       sql += ' AND b.society_id = ?';
       params.push(societyId);
     }
-    sql += ' ORDER BY b.billing_date DESC';
-    const [rows] = await db.pool.execute(sql, params);
-    let billingSummary = null;
-    if (societyId) {
-      const [soc] = await db.pool.execute(
-        'SELECT billing_cycle, monthly_fee, yearly_fee FROM societies WHERE id = ?',
-        [societyId]
+    if (req.user?.role === config.roles.RESIDENT) {
+      const [flats] = await db.pool.execute(
+        'SELECT flat_id FROM residents WHERE user_id = ? AND society_id = ?',
+        [req.user.id, societyId]
       );
-      if (soc.length) {
-        const c = (soc[0].billing_cycle || 'monthly').toLowerCase();
-        const monthlyFee = parseFloat(soc[0].monthly_fee || 0);
-        const yearlyFee = parseFloat(soc[0].yearly_fee || 0);
-        billingSummary = {
-          billingCycle: c,
-          monthlyFee,
-          yearlyFee,
-          periodLabel: c === 'yearly' ? 'Yearly' : c === 'quarterly' ? 'Quarterly' : 'Monthly',
-          periodAmount: c === 'yearly' ? (yearlyFee || monthlyFee * 12) : c === 'quarterly' ? (yearlyFee ? yearlyFee / 4 : monthlyFee * 3) : monthlyFee,
-        };
+      const flatIds = (flats || []).map((r) => r.flat_id).filter(Boolean);
+      if (!flatIds.length) {
+        const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 200 });
+        return jsonCollection(res, [], { page, limit, total: 0 }, {});
+      }
+      sql += ' AND b.flat_id IN (' + flatIds.map(() => '?').join(',') + ')';
+      params.push(...flatIds);
+    }
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 20, maxLimit: 100 });
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS bill_count`;
+    const [countRows] = await db.pool.execute(countSql, params);
+    const total = Number(countRows[0]?.total ?? 0);
+    sql += ` ORDER BY b.billing_date DESC LIMIT ? OFFSET ?`;
+    const [rows] = await db.pool.execute(sql, [...params, limit, offset]);
+    let billingSummary = null;
+    if (societyId && req.user?.role !== config.roles.RESIDENT) {
+      try {
+        const [soc] = await db.pool.execute(
+          'SELECT billing_cycle, monthly_fee, yearly_fee FROM societies WHERE id = ?',
+          [societyId]
+        );
+        if (soc.length) {
+          const c = (soc[0].billing_cycle || 'monthly').toLowerCase();
+          const monthlyFee = parseFloat(soc[0].monthly_fee || 0);
+          const yearlyFee = parseFloat(soc[0].yearly_fee || 0);
+          billingSummary = {
+            billingCycle: c,
+            monthlyFee,
+            yearlyFee,
+            periodLabel: c === 'yearly' ? 'Yearly' : c === 'quarterly' ? 'Quarterly' : 'Monthly',
+            periodAmount: c === 'yearly' ? (yearlyFee || monthlyFee * 12) : c === 'quarterly' ? (yearlyFee ? yearlyFee / 4 : monthlyFee * 3) : monthlyFee,
+          };
+        }
+      } catch (_) {
+        /* optional columns */
       }
     }
-    const payload = {
-      success: true,
-      data: rows.map((r) => ({
+    const extra = billingSummary ? { billingSummary } : {};
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         societyId: r.society_id,
+        flatId: r.flat_id,
         societyName: r.society_name,
         societyAlias: r.society_alias,
         amount: parseFloat(r.amount),
@@ -60,9 +84,9 @@ async function list(req, res, next) {
         notes: r.notes,
         createdAt: r.created_at,
       })),
-    };
-    if (billingSummary) payload.billingSummary = billingSummary;
-    res.json(payload);
+      { page, limit, total },
+      extra
+    );
   } catch (err) {
     next(err);
   }

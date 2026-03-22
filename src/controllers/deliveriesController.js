@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -36,7 +37,10 @@ async function list(req, res, next) {
       sql += ' AND DATE(d.received_at) = ?';
       params.push(date);
     }
-    sql += ' ORDER BY d.received_at DESC LIMIT 500';
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 500 });
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS sub`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY d.received_at DESC LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
     const guardIds = [...new Set(rows.map((r) => r.received_by_guard).filter(Boolean))];
     let guardMap = {};
@@ -45,9 +49,9 @@ async function list(req, res, next) {
       const [users] = await db.pool.query('SELECT id, name FROM users WHERE id IN (' + placeholders + ')', guardIds);
       users.forEach((u) => { guardMap[u.id] = u.name; });
     }
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         flatId: r.flat_id,
         tower: r.tower,
@@ -61,7 +65,8 @@ async function list(req, res, next) {
         collectedAt: r.collected_at,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

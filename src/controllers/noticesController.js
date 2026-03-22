@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -10,23 +11,26 @@ async function list(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const [rows] = await db.pool.execute(
-      `SELECT id, society_id, title, message, scheduled_at, published_at, created_by, created_at
-       FROM notices WHERE society_id = ? ORDER BY created_at DESC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM notices WHERE society_id = ?',
       [societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        message: r.message,
-        scheduledAt: r.scheduled_at,
-        publishedAt: r.published_at,
-        createdBy: r.created_by,
-        createdAt: r.created_at,
-      })),
-    });
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, title, message, scheduled_at, published_at, created_by, created_at
+       FROM notices WHERE society_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId]
+    );
+    const data = rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      message: r.message,
+      scheduledAt: r.scheduled_at,
+      publishedAt: r.published_at,
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+    }));
+    jsonCollection(res, data, { page, limit, total: total ?? 0 });
   } catch (err) {
     next(err);
   }

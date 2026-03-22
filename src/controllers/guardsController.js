@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getRelativeUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -43,7 +44,10 @@ async function list(req, res, next) {
       const term = '%' + String(block).trim() + '%';
       params.push(term, term);
     }
-    sql += ' ORDER BY name';
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS g_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY name LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
     let data = rows.map(mapGuardRow);
     if (shiftDate && data.length > 0) {
@@ -65,7 +69,7 @@ async function list(req, res, next) {
       });
       data = data.map((g) => ({ ...g, shifts: byGuard[g.id] || [] }));
     }
-    res.json({ success: true, data });
+    jsonCollection(res, data, { page, limit, total: total ?? 0 });
   } catch (err) {
     next(err);
   }

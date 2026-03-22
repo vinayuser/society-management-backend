@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -18,11 +19,17 @@ async function list(req, res, next) {
       sql += ' AND category = ?';
       params.push(category);
     }
-    sql += ' ORDER BY vendor_name';
+    if (req.user?.role === 'resident') {
+      sql += " AND (status = 'active' OR status IS NULL)";
+    }
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS v_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY vendor_name LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         societyId: r.society_id,
         vendorName: r.vendor_name,
@@ -34,7 +41,8 @@ async function list(req, res, next) {
         status: r.status,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

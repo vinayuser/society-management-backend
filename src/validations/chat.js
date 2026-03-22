@@ -28,6 +28,7 @@ const messagesQuery = Joi.object({
   group_id: Joi.number().integer().required(),
   limit: Joi.number().integer().min(1).max(100).optional().default(50),
   offset: Joi.number().integer().min(0).optional().default(0),
+  page: Joi.number().integer().min(1).optional(),
 });
 
 const markRead = Joi.object({

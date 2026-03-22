@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 const ADMIN_ROLES = ['society_admin', 'super_admin'];
 
@@ -18,6 +19,13 @@ async function listGroups(req, res, next) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
     const userId = req.user.id;
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      `SELECT COUNT(*) AS total FROM chat_groups g
+       INNER JOIN chat_group_members m ON m.group_id = g.id AND m.user_id = ?
+       WHERE g.society_id = ?`,
+      [userId, societyId]
+    );
     const [rows] = await db.pool.execute(
       `SELECT g.id, g.society_id, g.name, g.description, g.icon, g.admin_only_posting, g.members_can_delete_own,
               g.created_by, g.created_at, g.updated_at,
@@ -26,12 +34,12 @@ async function listGroups(req, res, next) {
        FROM chat_groups g
        INNER JOIN chat_group_members m ON m.group_id = g.id AND m.user_id = ?
        WHERE g.society_id = ?
-       ORDER BY g.updated_at DESC`,
+       ORDER BY g.updated_at DESC LIMIT ${limit} OFFSET ${offset}`,
       [userId, societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         societyId: r.society_id,
         name: r.name,
@@ -45,7 +53,8 @@ async function listGroups(req, res, next) {
         memberCount: r.member_count,
         messageCount: r.message_count,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -214,7 +223,19 @@ async function getMessages(req, res, next) {
   try {
     const societyId = getSocietyId(req);
     const userId = req.user.id;
-    const { group_id: groupId, limit, offset } = req.query;
+    const { group_id: groupId, limit: rawLimit, offset: rawOffset, page: rawPage } = req.query;
+    let limit = parseInt(rawLimit, 10);
+    if (!Number.isFinite(limit) || limit < 1) limit = 50;
+    limit = Math.min(100, limit);
+    let offset;
+    let page;
+    if (rawPage != null && rawPage !== '') {
+      page = Math.max(1, parseInt(String(rawPage), 10) || 1);
+      offset = (page - 1) * limit;
+    } else {
+      offset = Math.max(0, parseInt(rawOffset, 10) || 0);
+      page = Math.floor(offset / limit) + 1;
+    }
     const [memberCheck] = await db.pool.execute(
       'SELECT 1 FROM chat_group_members m INNER JOIN chat_groups g ON g.id = m.group_id WHERE m.group_id = ? AND m.user_id = ? AND g.society_id = ?',
       [groupId, userId, societyId]
@@ -230,7 +251,7 @@ async function getMessages(req, res, next) {
        WHERE m.group_id = ? AND m.society_id = ? AND m.deleted_at IS NULL
        ORDER BY m.created_at DESC
        LIMIT ? OFFSET ?`,
-      [groupId, societyId, parseInt(limit, 10), parseInt(offset, 10)]
+      [groupId, societyId, limit, offset]
     );
     const messageIds = messages.map((m) => m.id);
     let readCounts = {};
@@ -249,9 +270,9 @@ async function getMessages(req, res, next) {
       [groupId, societyId]
     );
     const totalCount = (totalRows && totalRows[0] && totalRows[0].c) || 0;
-    res.json({
-      success: true,
-      data: messages.reverse().map((m) => ({
+    jsonCollection(
+      res,
+      messages.reverse().map((m) => ({
         id: m.id,
         groupId: m.group_id,
         societyId: m.society_id,
@@ -264,8 +285,8 @@ async function getMessages(req, res, next) {
         createdAt: m.created_at,
         readCount: readCounts[m.id] || 0,
       })),
-      total: totalCount,
-    });
+      { page, limit, total: totalCount }
+    );
   } catch (err) {
     next(err);
   }
@@ -410,20 +431,26 @@ async function getSocietyUsers(req, res, next) {
     if (!societyId) {
       return res.status(400).json({ success: false, message: 'Society context required' });
     }
-    const [rows] = await db.pool.execute(
-      'SELECT id, name, email, phone, role FROM users WHERE society_id = ? AND is_active = 1 ORDER BY name',
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 50, maxLimit: 200 });
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM users WHERE society_id = ? AND is_active = 1',
       [societyId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, name, email, phone, role FROM users WHERE society_id = ? AND is_active = 1 ORDER BY name LIMIT ${limit} OFFSET ${offset}`,
+      [societyId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         name: r.name,
         email: r.email,
         phone: r.phone,
         role: r.role,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

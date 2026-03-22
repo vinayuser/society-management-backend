@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -29,11 +30,14 @@ async function list(req, res, next) {
       sql += ' AND c.user_id = ?';
       params.push(req.user.id);
     }
-    sql += ' ORDER BY c.created_at DESC';
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS cpl_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY c.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         userId: r.user_id,
         userName: r.user_name,
@@ -46,7 +50,8 @@ async function list(req, res, next) {
         resolvedAt: r.resolved_at,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

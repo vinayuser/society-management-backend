@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getFlatDocumentRelativeUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -11,13 +12,18 @@ async function list(req, res, next) {
     const flatId = req.params.id;
     const [flatCheck] = await db.pool.execute('SELECT 1 FROM flats WHERE id = ? AND society_id = ?', [flatId, societyId]);
     if (!flatCheck.length) return res.status(404).json({ success: false, message: 'Flat not found' });
-    const [rows] = await db.pool.execute(
-      'SELECT id, society_id, flat_id, document_name, document_type, file_url, uploaded_at FROM flat_documents WHERE society_id = ? AND flat_id = ? ORDER BY uploaded_at DESC',
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM flat_documents WHERE society_id = ? AND flat_id = ?',
       [societyId, flatId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, flat_id, document_name, document_type, file_url, uploaded_at FROM flat_documents WHERE society_id = ? AND flat_id = ? ORDER BY uploaded_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, flatId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         flatId: r.flat_id,
         documentName: r.document_name,
@@ -25,7 +31,8 @@ async function list(req, res, next) {
         fileUrl: r.file_url,
         uploadedAt: r.uploaded_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

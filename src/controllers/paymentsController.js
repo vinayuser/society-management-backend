@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 /** Get user IDs for society admins of a society (for platform notifications) */
 async function getSocietyAdminUserIds(societyId) {
@@ -59,21 +60,37 @@ function displayMonthForBilling(monthNum, type) {
   return monthNum;
 }
 
-/** Super admin: list societies with per-month payment status for a year */
+/** Super admin: list societies with per-month payment status for a year (paginated) */
 async function overview(req, res, next) {
   try {
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const { page, limit, offset } = normalizePageLimit(req.query, { defaultLimit: 20, maxLimit: 100 });
+
+    const societyWhere = `FROM societies WHERE status IN ('active', 'onboarding_completed', 'suspended')`;
+    const [countRows] = await db.pool.execute(`SELECT COUNT(*) AS total ${societyWhere}`);
+    const total = Number(countRows[0]?.total ?? 0);
+
     const [societies] = await db.pool.execute(
       `SELECT id, name, alias, monthly_fee, yearly_fee, billing_cycle, created_at
-       FROM societies WHERE status IN ('active', 'onboarding_completed', 'suspended') ORDER BY name`
+       ${societyWhere} ORDER BY name LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
-    const [billingRows] = await db.pool.execute(
-      `SELECT society_id, MONTH(billing_date) as month, amount, payment_status, type
-       FROM billing
-       WHERE type IN ('setup', 'monthly', 'quarterly', 'yearly') AND YEAR(billing_date) = ?
-       ORDER BY society_id, month`,
-      [year]
-    );
+
+    const ids = societies.map((s) => s.id);
+    let billingRows = [];
+    if (ids.length) {
+      const ph = ids.map(() => '?').join(',');
+      const [rows] = await db.pool.execute(
+        `SELECT society_id, MONTH(billing_date) as month, amount, payment_status, type
+         FROM billing
+         WHERE type IN ('setup', 'monthly', 'quarterly', 'yearly') AND YEAR(billing_date) = ?
+         AND society_id IN (${ph})
+         ORDER BY society_id, month`,
+        [year, ...ids]
+      );
+      billingRows = rows;
+    }
+
     const bySocietyMonth = {};
     for (const r of billingRows) {
       const displayMonth = displayMonthForBilling(r.month, r.type || 'monthly');
@@ -126,7 +143,7 @@ async function overview(req, res, next) {
         months,
       };
     });
-    res.json({ success: true, data, year });
+    jsonCollection(res, data, { page, limit, total }, { year });
   } catch (err) {
     next(err);
   }

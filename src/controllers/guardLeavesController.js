@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -29,9 +30,12 @@ async function list(req, res, next) {
     const params = [societyId];
     if (guardId) { sql += ' AND guard_id = ?'; params.push(guardId); }
     if (status && String(status).trim()) { sql += ' AND status = ?'; params.push(String(status).trim()); }
-    sql += ' ORDER BY start_date DESC';
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const countSql = `SELECT COUNT(*) AS total FROM (${sql}) AS gl_count`;
+    const [[{ total }]] = await db.pool.execute(countSql, params);
+    sql += ` ORDER BY start_date DESC LIMIT ${limit} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
-    res.json({ success: true, data: rows.map(mapLeave) });
+    jsonCollection(res, rows.map(mapLeave), { page, limit, total: total ?? 0 });
   } catch (err) {
     next(err);
   }

@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -31,10 +32,8 @@ async function list(req, res, next) {
   try {
     const societyId = getSocietyId(req);
     if (!societyId) return res.status(400).json({ success: false, message: 'Society context required' });
-    const { search, role, tower, status, page = 1, limit = 20 } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
-    const offset = (pageNum - 1) * limitNum;
+    const { search, role, tower, status } = req.query;
+    const { page: pageNum, limit: limitNum, offset } = normalizePageLimit(req.query);
 
     let sql = `SELECT m.id, m.society_id, m.flat_id, m.user_id, m.name, m.profile_image, m.phone, m.email, m.role, m.gender, m.dob, m.occupation, m.status, m.joined_at, m.created_at, m.updated_at,
       f.tower, f.flat_number
@@ -81,11 +80,7 @@ async function list(req, res, next) {
     sql += ` ORDER BY m.name LIMIT ${limitNum} OFFSET ${offset}`;
     const [rows] = await db.pool.execute(sql, params);
 
-    res.json({
-      success: true,
-      data: rows.map(mapMember),
-      pagination: { page: pageNum, limit: limitNum, total },
-    });
+    jsonCollection(res, rows.map(mapMember), { page: pageNum, limit: limitNum, total });
   } catch (err) {
     next(err);
   }
@@ -204,19 +199,27 @@ async function listComplaints(req, res, next) {
     const [member] = await db.pool.execute('SELECT user_id FROM members WHERE id = ? AND society_id = ?', [memberId, societyId]);
     if (!member.length) return res.status(404).json({ success: false, message: 'Member not found' });
     const userId = member[0].user_id;
-    if (!userId) return res.json({ success: true, data: [] });
-    const [rows] = await db.pool.execute(
-      `SELECT c.id, c.user_id, c.title, c.description, c.category, c.status, c.resolved_at, c.created_at
-       FROM complaints c WHERE c.society_id = ? AND c.user_id = ? ORDER BY c.created_at DESC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    if (!userId) {
+      return jsonCollection(res, [], { page, limit, total: 0 });
+    }
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM complaints c WHERE c.society_id = ? AND c.user_id = ?',
       [societyId, userId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT c.id, c.user_id, c.title, c.description, c.category, c.status, c.resolved_at, c.created_at
+       FROM complaints c WHERE c.society_id = ? AND c.user_id = ? ORDER BY c.created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, userId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id, userId: r.user_id, title: r.title, description: r.description, category: r.category,
         status: r.status, resolvedAt: r.resolved_at, createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -229,19 +232,27 @@ async function listMarketplace(req, res, next) {
     const [member] = await db.pool.execute('SELECT user_id FROM members WHERE id = ? AND society_id = ?', [memberId, societyId]);
     if (!member.length) return res.status(404).json({ success: false, message: 'Member not found' });
     const userId = member[0].user_id;
-    if (!userId) return res.json({ success: true, data: [] });
-    const [rows] = await db.pool.execute(
-      `SELECT id, society_id, user_id, title, description, price, category, status, created_at
-       FROM marketplace_items WHERE society_id = ? AND user_id = ? ORDER BY created_at DESC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    if (!userId) {
+      return jsonCollection(res, [], { page, limit, total: 0 });
+    }
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM marketplace_items WHERE society_id = ? AND user_id = ?',
       [societyId, userId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, user_id, title, description, price, category, status, created_at
+       FROM marketplace_items WHERE society_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, userId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id, userId: r.user_id, title: r.title, description: r.description, price: parseFloat(r.price),
         category: r.category, status: r.status, createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }
@@ -268,7 +279,8 @@ async function listActivity(req, res, next) {
       items.forEach((i) => activities.push({ type: 'marketplace', id: i.id, title: i.title, status: i.status, createdAt: i.created_at }));
     }
     activities.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json({ success: true, data: activities.slice(0, 20) });
+    const sliced = activities.slice(0, 20);
+    jsonCollection(res, sliced, { page: 1, limit: 20, total: activities.length });
   } catch (err) {
     next(err);
   }

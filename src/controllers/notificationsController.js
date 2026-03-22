@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 /** List notifications for the current user (platform-wide: user_id + type). Title and body contain full detail. */
 async function list(req, res, next) {
@@ -7,9 +8,18 @@ async function list(req, res, next) {
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM notifications WHERE user_id = ?',
+      [userId]
+    );
+    const [[{ unreadTotal }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS unreadTotal FROM notifications WHERE user_id = ? AND read_at IS NULL',
+      [userId]
+    );
     const [rows] = await db.pool.execute(
       `SELECT id, user_id, type, title, body, reference_id, created_at, read_at
-       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
+       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
       [userId]
     );
     const data = rows.map((r) => ({
@@ -22,12 +32,7 @@ async function list(req, res, next) {
       createdAt: r.created_at,
       readAt: r.read_at,
     }));
-    const unreadCount = data.filter((r) => !r.readAt).length;
-    res.json({
-      success: true,
-      data,
-      unreadCount,
-    });
+    jsonCollection(res, data, { page, limit, total: total ?? 0 }, { unreadCount: unreadTotal ?? 0 });
   } catch (err) {
     next(err);
   }

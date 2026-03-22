@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -12,14 +13,19 @@ async function list(req, res, next) {
     if (!flatCheck.length) {
       return res.status(404).json({ success: false, message: 'Flat not found' });
     }
-    const [rows] = await db.pool.execute(
-      `SELECT id, society_id, flat_id, vehicle_number, vehicle_type, parking_slot, created_at
-       FROM flat_vehicles WHERE society_id = ? AND flat_id = ? ORDER BY created_at ASC`,
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM flat_vehicles WHERE society_id = ? AND flat_id = ?',
       [societyId, flatId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, flat_id, vehicle_number, vehicle_type, parking_slot, created_at
+       FROM flat_vehicles WHERE society_id = ? AND flat_id = ? ORDER BY created_at ASC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, flatId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id,
         flatId: r.flat_id,
         vehicleNumber: r.vehicle_number,
@@ -27,7 +33,8 @@ async function list(req, res, next) {
         parkingSlot: r.parking_slot,
         createdAt: r.created_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

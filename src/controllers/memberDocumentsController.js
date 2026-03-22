@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { getMemberDocumentRelativeUrl } = require('../middleware/upload');
+const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -11,16 +12,22 @@ async function list(req, res, next) {
     const memberId = req.params.id;
     const [memberCheck] = await db.pool.execute('SELECT 1 FROM members WHERE id = ? AND society_id = ?', [memberId, societyId]);
     if (!memberCheck.length) return res.status(404).json({ success: false, message: 'Member not found' });
-    const [rows] = await db.pool.execute(
-      'SELECT id, society_id, member_id, document_name, document_type, file_url, uploaded_at FROM member_documents WHERE society_id = ? AND member_id = ? ORDER BY uploaded_at DESC',
+    const { page, limit, offset } = normalizePageLimit(req.query);
+    const [[{ total }]] = await db.pool.execute(
+      'SELECT COUNT(*) AS total FROM member_documents WHERE society_id = ? AND member_id = ?',
       [societyId, memberId]
     );
-    res.json({
-      success: true,
-      data: rows.map((r) => ({
+    const [rows] = await db.pool.execute(
+      `SELECT id, society_id, member_id, document_name, document_type, file_url, uploaded_at FROM member_documents WHERE society_id = ? AND member_id = ? ORDER BY uploaded_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [societyId, memberId]
+    );
+    jsonCollection(
+      res,
+      rows.map((r) => ({
         id: r.id, memberId: r.member_id, documentName: r.document_name, documentType: r.document_type, fileUrl: r.file_url, uploadedAt: r.uploaded_at,
       })),
-    });
+      { page, limit, total: total ?? 0 }
+    );
   } catch (err) {
     next(err);
   }

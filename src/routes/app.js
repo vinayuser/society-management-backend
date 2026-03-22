@@ -15,5 +15,7 @@ router.use(authenticate, scopeToUserSociety, loadResidentFlats);
 
 router.get('/my-flats', authorize('resident'), appController.myFlats);
 router.get('/profile', appController.myProfile);
+router.get('/directory', authorize('resident'), appController.directory);
+router.get('/activity', authorize('resident'), appController.activityFeed);
 
 module.exports = router;

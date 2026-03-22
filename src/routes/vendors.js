@@ -8,11 +8,23 @@ const { vendors: v } = require('../validations');
 
 const router = express.Router();
 
-router.use(authenticate, adminOrSocietyAdmin, scopeToUserSociety);
+router.use(authenticate);
 
-router.get('/', vendorsController.list);
-router.post('/', validate(v.create), vendorsController.create);
-router.patch('/:id', validate(v.idParam, 'params'), validate(v.update), vendorsController.update);
-router.delete('/:id', validate(v.idParam, 'params'), vendorsController.remove);
+/** Society members (residents) can browse approved vendors; admins manage them. */
+router.get('/', (req, res, next) => {
+  if (req.user.role === 'resident') {
+    return scopeToUserSociety(req, res, () => {
+      if (!req.societyId) {
+        return res.status(400).json({ success: false, message: 'Society context required' });
+      }
+      return next();
+    });
+  }
+  return adminOrSocietyAdmin(req, res, () => scopeToUserSociety(req, res, next));
+}, vendorsController.list);
+
+router.post('/', adminOrSocietyAdmin, scopeToUserSociety, validate(v.create), vendorsController.create);
+router.patch('/:id', adminOrSocietyAdmin, scopeToUserSociety, validate(v.idParam, 'params'), validate(v.update), vendorsController.update);
+router.delete('/:id', adminOrSocietyAdmin, scopeToUserSociety, validate(v.idParam, 'params'), vendorsController.remove);
 
 module.exports = router;
