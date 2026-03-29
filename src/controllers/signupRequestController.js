@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const emailService = require('../services/emailService');
 const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
+const { verifySignupSessionToken } = require('../utils/jwt');
 
 function getSocietyId(req) {
   return req.societyId || req.user?.societyId;
@@ -10,9 +11,40 @@ function getSocietyId(req) {
 /** Public: create a signup request (member wants to join society) */
 async function create(req, res, next) {
   try {
-    const { societyId, countryId, stateId, cityId, name, email, phone, tower, flatNumber, password } = req.body;
+    const { signupSessionToken, societyId, countryId, stateId, cityId, name, email, phone, tower, flatNumber, password } =
+      req.body;
+
+    let verified;
+    try {
+      verified = verifySignupSessionToken(signupSessionToken);
+    } catch (e) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired verification. Go back and complete the email/mobile OTP step.',
+      });
+    }
+
+    const emailTrim = String(email || '').trim().toLowerCase();
+    const phoneTrim = (phone || '').trim().replace(/[\s-()]/g, '') || null;
+
+    if (verified.contactType === 'email') {
+      if (emailTrim !== verified.contact) {
+        return res.status(400).json({ success: false, message: 'Email must match the address you verified with OTP' });
+      }
+    } else if (verified.contactType === 'phone') {
+      if (!phoneTrim || phoneTrim !== verified.contact) {
+        return res.status(400).json({ success: false, message: 'Phone must match the number you verified with OTP' });
+      }
+    }
+
     const [societies] = await db.pool.execute(
-      'SELECT id, name, status, country_id, state_id, city_id FROM societies WHERE id = ?',
+      `SELECT s.id, s.name, s.status,
+        COALESCE(s.country_id, c.country_id) AS country_id,
+        COALESCE(s.state_id, c.state_id) AS state_id,
+        COALESCE(s.city_id, c.city_id) AS city_id
+       FROM societies s
+       LEFT JOIN society_config c ON c.society_id = s.id
+       WHERE s.id = ?`,
       [societyId]
     );
     if (!societies.length) {

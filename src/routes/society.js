@@ -43,6 +43,15 @@ router.patch(
   societyController.updateStatus
 );
 
+router.post(
+  '/:id/admin-password',
+  authenticate,
+  superAdminOnly,
+  validate(soc.idParam, 'params'),
+  validate(soc.resetAdminPassword),
+  societyController.resetSocietyAdminPassword
+);
+
 router.patch(
   '/:id',
   authenticate,

@@ -41,6 +41,7 @@ const bulkCreate = Joi.object({
       })
     )
     .min(1)
+    .max(10000)
     .required(),
   defaults: Joi.object({
     floor: Joi.number().integer().min(0).optional().allow(null),

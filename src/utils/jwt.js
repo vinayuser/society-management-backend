@@ -21,4 +21,23 @@ function verifyToken(token) {
   return jwt.verify(token, config.jwt.secret);
 }
 
-module.exports = { signAccessToken, signRefreshToken, verifyToken };
+/** Short-lived token after OTP step for public resident signup flow. */
+function signSignupSessionToken(contactType, contact) {
+  return jwt.sign(
+    { type: 'signup_session', contactType, contact },
+    config.jwt.secret,
+    { expiresIn: '60m' }
+  );
+}
+
+function verifySignupSessionToken(token) {
+  const decoded = jwt.verify(token, config.jwt.secret);
+  if (decoded.type !== 'signup_session') {
+    const err = new Error('Invalid signup session');
+    err.status = 401;
+    throw err;
+  }
+  return decoded;
+}
+
+module.exports = { signAccessToken, signRefreshToken, verifyToken, signSignupSessionToken, verifySignupSessionToken };

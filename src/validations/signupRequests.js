@@ -1,6 +1,7 @@
 const Joi = require('joi');
 
 const create = Joi.object({
+  signupSessionToken: Joi.string().required(),
   societyId: Joi.number().integer().required(),
   countryId: Joi.number().integer().min(1).required(),
   stateId: Joi.number().integer().min(1).required(),

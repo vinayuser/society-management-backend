@@ -30,4 +30,9 @@ const updateConfig = Joi.object({
   adminContactPhone: Joi.string().max(32).allow('', null).optional(),
 });
 
-module.exports = { idParam, updateStatus, update, updateConfig };
+const resetAdminPassword = Joi.object({
+  userId: Joi.number().integer().positive().required(),
+  newPassword: Joi.string().min(6).max(128).required(),
+});
+
+module.exports = { idParam, updateStatus, update, updateConfig, resetAdminPassword };

@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const redis = require('../utils/redis');
 const { normalizePageLimit, jsonCollection } = require('../utils/apiResponse');
@@ -7,6 +8,8 @@ async function listForSignup(req, res, next) {
   try {
     const { countryId, stateId, cityId, q } = req.query;
 
+    // Location filters use society_config (c.*). Some deployments lack country_id/state_id/city_id on `societies`;
+    // those columns are always stored on society_config at onboarding.
     let sql = `SELECT s.id, s.name, s.alias
                FROM societies s
                LEFT JOIN society_config c ON c.society_id = s.id
@@ -14,15 +17,15 @@ async function listForSignup(req, res, next) {
     const params = [];
 
     if (countryId != null && String(countryId).trim() !== '') {
-      sql += ' AND s.country_id = ?';
+      sql += ' AND c.country_id = ?';
       params.push(String(countryId).trim());
     }
     if (stateId != null && String(stateId).trim() !== '') {
-      sql += ' AND s.state_id = ?';
+      sql += ' AND c.state_id = ?';
       params.push(String(stateId).trim());
     }
     if (cityId != null && String(cityId).trim() !== '') {
-      sql += ' AND s.city_id = ?';
+      sql += ' AND c.city_id = ?';
       params.push(String(cityId).trim());
     }
 
@@ -95,10 +98,14 @@ async function list(req, res, next) {
     const total = Number(countRows[0]?.total ?? 0);
     const [rows] = await db.pool.execute(
       `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee,
-        s.billing_cycle, s.yearly_fee, s.status, s.created_at,
-        c.logo, c.theme_color, c.address
+        s.billing_cycle, s.yearly_fee, s.status, s.created_at, s.country_id, s.state_id, s.city_id,
+        c.logo, c.theme_color, c.address,
+        co.name AS country_name, st.name AS state_name, ci.name AS city_name
        FROM societies s
        LEFT JOIN society_config c ON c.society_id = s.id
+       LEFT JOIN countries co ON co.id = s.country_id
+       LEFT JOIN states st ON st.id = s.state_id
+       LEFT JOIN cities ci ON ci.id = s.city_id
        ORDER BY s.created_at DESC
        LIMIT ? OFFSET ?`,
       [limit, offset]
@@ -122,6 +129,12 @@ async function list(req, res, next) {
         logo: r.logo,
         themeColor: r.theme_color,
         address: r.address,
+        countryId: r.country_id || null,
+        stateId: r.state_id || null,
+        cityId: r.city_id || null,
+        countryName: r.country_name || null,
+        stateName: r.state_name || null,
+        cityName: r.city_name || null,
       })),
       { page, limit, total }
     );
@@ -135,10 +148,14 @@ async function getById(req, res, next) {
     const id = req.params.id || req.societyId;
     const [rows] = await db.pool.execute(
       `SELECT s.id, s.name, s.alias, s.email, s.phone, s.flat_count, s.plan_type, s.setup_fee, s.monthly_fee,
-        s.billing_cycle, s.yearly_fee, s.status, s.created_at,
-        c.logo, c.theme_color, c.address, c.banner_image, c.towers_blocks, c.total_flats, c.admin_contact_name, c.admin_contact_phone
+        s.billing_cycle, s.yearly_fee, s.status, s.created_at, s.country_id, s.state_id, s.city_id,
+        c.logo, c.theme_color, c.address, c.banner_image, c.towers_blocks, c.total_flats, c.admin_contact_name, c.admin_contact_phone,
+        co.name AS country_name, st.name AS state_name, ci.name AS city_name
        FROM societies s
        LEFT JOIN society_config c ON c.society_id = s.id
+       LEFT JOIN countries co ON co.id = s.country_id
+       LEFT JOIN states st ON st.id = s.state_id
+       LEFT JOIN cities ci ON ci.id = s.city_id
        WHERE s.id = ?`,
       [id]
     );
@@ -178,6 +195,12 @@ async function getById(req, res, next) {
         totalFlats: r.total_flats,
         adminContactName: r.admin_contact_name,
         adminContactPhone: r.admin_contact_phone,
+        countryId: r.country_id || null,
+        stateId: r.state_id || null,
+        cityId: r.city_id || null,
+        countryName: r.country_name || null,
+        stateName: r.state_name || null,
+        cityName: r.city_name || null,
         adminUsers,
       },
     });
@@ -349,6 +372,30 @@ async function updateConfig(req, res, next) {
   }
 }
 
+/** Super admin: set a new password for a society_admin user belonging to this society. */
+async function resetSocietyAdminPassword(req, res, next) {
+  try {
+    const societyId = Number(req.params.id);
+    const { userId, newPassword } = req.body;
+    const [rows] = await db.pool.execute(
+      `SELECT id FROM users
+       WHERE id = ? AND society_id = ? AND role = 'society_admin' AND (is_active IS NULL OR is_active = 1)`,
+      [userId, societyId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Society admin user not found for this society',
+      });
+    }
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.pool.execute('UPDATE users SET password_hash = ? WHERE id = ?', [hash, userId]);
+    res.json({ success: true, message: 'Password updated' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   list,
   listForSignup,
@@ -359,4 +406,5 @@ module.exports = {
   updateStatus,
   update,
   updateConfig,
+  resetSocietyAdminPassword,
 };

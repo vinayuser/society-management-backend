@@ -20,4 +20,13 @@ const sendSetPasswordLink = Joi.object({
   userId: Joi.number().integer().required(),
 });
 
-module.exports = { login, refresh, setPassword, sendSetPasswordLink };
+const signupOtpRequest = Joi.object({
+  contact: Joi.string().trim().min(3).required(),
+});
+
+const signupOtpVerify = Joi.object({
+  contact: Joi.string().trim().min(3).required(),
+  otp: Joi.string().length(6).pattern(/^\d+$/).required(),
+});
+
+module.exports = { login, refresh, setPassword, sendSetPasswordLink, signupOtpRequest, signupOtpVerify };

@@ -157,8 +157,14 @@ async function getInviteByToken(req, res, next) {
   try {
     const { token } = req.params;
     const [rows] = await db.pool.execute(
-      `SELECT id, society_name, email, phone, flat_count, plan_type, plan_id, setup_fee, monthly_fee, billing_cycle, yearly_fee, address, country_id, state_id, city_id, invite_token, status, expires_at, created_at
-       FROM society_invites WHERE invite_token = ? AND status = 'pending'`,
+      `SELECT i.id, i.society_name, i.email, i.phone, i.flat_count, i.plan_type, i.plan_id, i.setup_fee, i.monthly_fee, i.billing_cycle, i.yearly_fee, i.address,
+        i.country_id, i.state_id, i.city_id, i.invite_token, i.status, i.expires_at, i.created_at,
+        co.name AS country_name, st.name AS state_name, ci.name AS city_name
+       FROM society_invites i
+       LEFT JOIN countries co ON co.id = i.country_id
+       LEFT JOIN states st ON st.id = i.state_id
+       LEFT JOIN cities ci ON ci.id = i.city_id
+       WHERE i.invite_token = ? AND i.status = 'pending'`,
       [token]
     );
     if (!rows.length) {
@@ -211,6 +217,9 @@ async function getInviteByToken(req, res, next) {
         countryId: invite.country_id || null,
         stateId: invite.state_id || null,
         cityId: invite.city_id || null,
+        countryName: invite.country_name || null,
+        stateName: invite.state_name || null,
+        cityName: invite.city_name || null,
       },
     });
   } catch (err) {
@@ -396,9 +405,13 @@ async function listInvites(req, res, next) {
     const total = Number(countRows[0]?.total ?? 0);
     const [rows] = await db.pool.execute(
       `SELECT i.id, i.society_name, i.email, i.phone, i.flat_count, i.plan_type, i.plan_id, i.setup_fee, i.monthly_fee, i.billing_cycle, i.yearly_fee, i.address, i.country_id, i.state_id, i.city_id, i.invite_token, i.status, i.expires_at, i.created_at,
-        p.name as plan_name
+        p.name as plan_name,
+        co.name AS country_name, st.name AS state_name, ci.name AS city_name
        FROM society_invites i
        LEFT JOIN society_plans p ON p.id = i.plan_id
+       LEFT JOIN countries co ON co.id = i.country_id
+       LEFT JOIN states st ON st.id = i.state_id
+       LEFT JOIN cities ci ON ci.id = i.city_id
        ORDER BY i.created_at DESC
        LIMIT ? OFFSET ?`,
       [limit, offset]
@@ -437,6 +450,9 @@ async function listInvites(req, res, next) {
           countryId: r.country_id || null,
           stateId: r.state_id || null,
           cityId: r.city_id || null,
+          countryName: r.country_name || null,
+          stateName: r.state_name || null,
+          cityName: r.city_name || null,
           inviteToken: r.invite_token,
           status: r.status,
           linkSetupFee: linkSetupFee || undefined,
